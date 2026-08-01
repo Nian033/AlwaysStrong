@@ -1,12 +1,14 @@
 name: Upstream update
 
-# Once a day, check TEESimulator-RS / PlayIntegrityFork for a newer release.
-# If anything changed, patch the pinned versions in build.sh and open a PR.
-# Manual run via "Run workflow" supported too.
-
+# Check TEESimulator-RS / PlayIntegrityFork for a newer release. If anything
+# changed, patch the pinned versions in build.sh and open a PR.
+#
+# The daily schedule is intentionally DISABLED: unauthenticated GitHub API
+# lookups from CI kept hitting rate limits (and the Fork/inject split made an
+# unattended auto-bump fragile), so it failed and emailed a red run every
+# morning. Run it by hand from the Actions tab ("Run workflow") when you want
+# to check for upstream bumps.
 on:
-  schedule:
-    - cron: '0 6 * * *'   # 06:00 UTC daily
   workflow_dispatch:
 
 permissions:
