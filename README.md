@@ -70,6 +70,15 @@ The two are merged so they coexist in one module: TEESimulator's `classes.dex` i
 
 The first Action tap fetches a working keybox and a fresh Pixel fingerprint and restarts Play Integrity, so there is no manual keybox step. The installer also removes conflicting standalone modules at install time (TrickyStore, PlayIntegrityFix/Fork, TEESimulator, playcurl/playcurlNEXT, SafetyNet Fix, MagiskHidePropsConf, Tricky Addon, Yurikey, and a few others).
 
+### Which build to download
+
+Each release ships two builds:
+
+- **`AlwaysStrong-<version>.zip`** — the default, and what [Releases](https://github.com/evoker0/AlwaysStrong/releases/latest) points to. Built on PlayIntegrityFork; covers arm64-v8a, armeabi-v7a, x86 and x86_64.
+- **`AlwaysStrong-<version>-inject.zip`** — arm64-v8a and armeabi-v7a only, built on PlayIntegrityFix (inject-s). A different spoof engine for ARM devices; try it if the default doesn't reach `STRONG` on yours.
+
+On x86 / x86_64 use the default build — the inject build has no x86 zygisk. Each build updates within its own line, so switching between them means flashing the other zip.
+
 
 ## Configuration
 
