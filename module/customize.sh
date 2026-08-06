@@ -61,9 +61,8 @@ else
 fi
 
 # --- extract our scripts + configs ---------------------------------------
-# engine.sh comes first: it names the upstream files this build's Play Integrity
-# engine needs ($ENGINE_FILES), which differ between the two builds. Everything
-# else in this script is engine-neutral.
+# engine.sh first: it names the upstream files this build's Play Integrity
+# engine needs ($ENGINE_FILES). Everything else here is engine-neutral.
 install_file "engine.sh" "$MODPATH"
 # shellcheck source=/dev/null
 . "$MODPATH/engine.sh"
@@ -104,10 +103,10 @@ else
 fi
 
 # --- PIF zygisk + dex ----------------------------------------------------
-# Ship whatever ABIs upstream built. PlayIntegrityFix inject-s builds ARM only,
-# so on x86 that build has no zygisk to install: the TEE half (hardware
-# attestation) still runs, but the Play Integrity spoof cannot, and we say so
-# rather than half-working in silence. PlayIntegrityFork covers all four ABIs.
+# Ship whatever ABIs upstream built. PlayIntegrityFork covers all four;
+# PlayIntegrityFix inject-s is ARM-only, so on x86 that build has no zygisk to
+# install — the TEE half still runs, the Play Integrity spoof can't, and the
+# install says so rather than half-working in silence.
 mkdir -p "$MODPATH/zygisk"
 ZN=0
 for z in arm64-v8a armeabi-v7a x86 x86_64; do

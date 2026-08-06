@@ -33,11 +33,9 @@ log() { echo "pif_native_fetch: $*"; }
 SELF_DIR=$(cd "${0%/*}" 2>/dev/null && pwd)
 [ -z "$SELF_DIR" ] && SELF_DIR=/data/adb/modules/tricky_store
 
-# This script fetches the Pixel IDENTITY; where that identity has to land, and
-# under which spoof-flag names, is the engine's business — engine.sh (overlaid
-# per build by build.sh) owns that. Never write the engine's prop file directly
-# from here, or one of the two builds ends up with flags the other one's zygisk
-# cannot read.
+# This fetches the Pixel identity. Where it lands, and under which spoof-flag
+# names, belongs to engine.sh — writing the engine's prop file directly from
+# here would give one build flags the other's zygisk cannot read.
 MODPATH="$SELF_DIR"
 if [ -f "$SELF_DIR/engine.sh" ]; then
     . "$SELF_DIR/engine.sh"
@@ -72,17 +70,17 @@ fi
 # that predates the subcommand just treats "autopif" as a URL and exits non-zero,
 # so this stays safe on a stale binary.
 #
-# It writes the identity together with inject-s's own spoof-flag names, so we
-# aim it at a scratch dir and strip those lines: the engine adapter appends the
-# flag set its zygisk actually reads. Seeding the scratch copy from the current
-# pif.prop keeps asfetch's security-patch reuse working.
+# It writes the identity with inject-s's spoof-flag names baked in, so it is
+# aimed at a scratch dir and those lines are stripped — the engine adapter
+# appends the set its own zygisk reads. Seeding the scratch copy from the
+# current pif.prop keeps asfetch's security-patch reuse working.
 if [ -n "$ABI" ] && [ -x "$ASFETCH" ]; then
     NW="$CONFIG_DIR/.pif_asfetch.$$"
     mkdir -p "$NW"
     # The caller bounds us with `timeout`, so a SIGTERM lands mid-fetch often
-    # enough to matter — without traps the scratch dir piles up in the config
-    # dir. INT/TERM must exit explicitly: busybox ash resumes the script after a
-    # trap, which would leave the fetch writing into a dir we just deleted.
+    # enough to matter. INT/TERM must exit explicitly: busybox ash resumes the
+    # script after a trap, which would leave the fetch writing into a dir that
+    # was just deleted.
     trap 'rm -rf "$NW"' EXIT
     trap 'rm -rf "$NW"; exit 143' TERM
     trap 'rm -rf "$NW"; exit 130' INT
@@ -248,10 +246,10 @@ fi
 [ -z "$SECURITY_PATCH" ] && SECURITY_PATCH="$(date '+%Y-%m')-05"
 
 # ---- 5. emit the identity, then let the engine install it -------------------
-# The build fields are engine-neutral; the STRONG spoof flags are not — Fork
-# wants spoofProvider=0 / spoofVendingFinger=1 and reads custom.pif.prop, while
-# inject-s wants spoofProvider=false / spoofVendingBuild=true and reads pif.prop.
-# engine.sh supplies both halves, so this stays the same in either build.
+# The build fields are engine-neutral; the spoof flags are not. Fork wants
+# spoofProvider=0 / spoofVendingFinger=1 in custom.pif.prop, inject-s wants
+# spoofProvider=false / spoofVendingBuild=true in pif.prop. engine.sh supplies
+# both halves.
 FP="google/$PRODUCT/$DEVICE:CANARY/$ID/$INCREMENTAL:user/release-keys"
 TMP="$W/pif.prop"
 cat > "$TMP" <<EOF
@@ -268,8 +266,8 @@ engine_spoof_block >> "$TMP"
 grep -q 'FINGERPRINT=google/.*/.*:CANARY/' "$TMP" || { log "produced pif.prop looks wrong."; exit 1; }
 
 mkdir -p "$CONFIG_DIR"
-# the engine adapter decides where its zygisk reads from; the config-dir copy is
-# for display + sync_patch and is written only once the engine accepted it.
+# the config-dir copy is for display + sync_patch, written only once the engine
+# has accepted the fingerprint.
 engine_install_pif "$TMP" || { log "$ENGINE could not install the fingerprint."; exit 1; }
 cp -f "$TMP" "$TARGET" 2>/dev/null
 

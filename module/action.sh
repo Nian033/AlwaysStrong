@@ -39,9 +39,9 @@ SED_I="sed -i"
 [ -n "$BB" ] && SED_I="$BB sed -i"
 
 # --- Play Integrity engine adapter ---
-# Which prop file the zygisk reads, and under which spoof-flag names, is the one
-# thing that differs between the two builds. engine.sh (overlaid by build.sh)
-# owns it; everything below is identical in both.
+# Which prop file the zygisk reads, and what its spoof flags are called, is all
+# that differs between the two builds. engine.sh owns it; everything below is
+# identical in both.
 if [ -f "$MODPATH/engine.sh" ]; then
     . "$MODPATH/engine.sh"
 else
@@ -109,11 +109,11 @@ fi
 sleep 1
 
 # --- Step 3: Fingerprint ---
-# Three sources, tried in order: our native crawl, then upstream's own fetcher,
-# then the two shipped static props. Each hands its result to the engine
-# adapter, so whichever lands ends up in the file this build's zygisk reads,
-# with that engine's STRONG flags applied. A failed primary is shown once as
-# "trying with fallback".
+# Three sources, tried in order: our native crawl, upstream's own fetcher, then
+# the two shipped static props. Each hands its result to the engine adapter, so
+# whichever lands ends up in the file this build's zygisk reads, with that
+# engine's STRONG flags applied. A failed primary shows once as "trying with
+# fallback".
 FP_OK=0
 FP_SRC=""
 
@@ -121,11 +121,11 @@ FP_SRC=""
 # knows where its own zygisk reads from and which spoof-flag names it wants.
 apply_pif() { engine_install_pif "$1"; }
 
-# 1. native crawl (PRIMARY) — fetches the same Google servers upstream does, but
-#    through asfetch. The multi-page crawl runs ~20-25s on a cold/slow network,
-#    so it's bounded at 60s (was 25s, which the crawl kept grazing -> SIGTERM ->
-#    forced fallback on every tap). Gate on the EXIT CODE: it is 0 only when the
-#    engine actually accepted a fresh fingerprint — a stale file must not count.
+# 1. native crawl (PRIMARY) — the same Google servers upstream uses, driven
+#    through asfetch. The multi-page crawl runs ~20-25s on a cold network, so a
+#    tight bound just forces the fallback on every tap. Gate on the EXIT CODE:
+#    it is 0 only when the engine accepted a fresh fingerprint — a stale file
+#    must not count as success.
 if [ -x "$MODPATH/pif_native_fetch.sh" ]; then
     if command -v timeout >/dev/null 2>&1; then
         timeout "$ENGINE_NATIVE_TIMEOUT" sh "$MODPATH/pif_native_fetch.sh" \
@@ -141,12 +141,11 @@ if [ "$FP_OK" = 0 ]; then
     sleep 1
 
     # 2. upstream's own fetcher (FALLBACK), whichever engine is installed.
-    #    Bounded so its crawl can't freeze the Action. `timeout` needs a command,
+    #    Bounded so its crawl can't freeze the Action. `timeout` takes a command,
     #    not a shell function, so this re-enters a subshell — and the engine
     #    functions read $MODPATH / $CONFIG_DIR / $SED_I, which are plain shell
-    #    variables here. Pass them through the environment: without the prefix
-    #    the subshell sees them empty, engine_autopif looks for /autopif4.sh,
-    #    and the fallback silently never runs.
+    #    variables here. They have to go through the environment; without the
+    #    prefix the subshell sees them empty and the fallback never runs.
     if command -v timeout >/dev/null 2>&1; then
         MODPATH="$MODPATH" CONFIG_DIR="$CONFIG_DIR" SED_I="$SED_I" \
             timeout "$ENGINE_AUTOPIF_TIMEOUT" \
@@ -181,9 +180,8 @@ esac
 sleep 1
 
 # --- Step 4: Spoof settings + security patch ---
-# Re-enforce even when the fetch above already did: a user (or an upstream
-# script) can have edited the prop between taps, and this is the cheap guarantee
-# that what the zygisk reads is a STRONG config.
+# Re-enforced even when the fetch above already did it: a user or an upstream
+# script can edit the prop between taps.
 engine_enforce_spoof
 
 PATCH=""

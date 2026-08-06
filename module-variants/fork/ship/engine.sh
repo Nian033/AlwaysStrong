@@ -1,37 +1,35 @@
 #!/system/bin/sh
-# AlwaysStrong engine adapter — PlayIntegrityFork.
+# Play Integrity engine adapter — PlayIntegrityFork.
 #
-# Everything that differs between the two Play Integrity engines lives here, so
-# the shared scripts (action.sh, service.sh, pif_native_fetch.sh, customize.sh)
-# stay identical across both builds. build.sh overlays exactly one of
-# module-variants/<engine>/ onto module/ when it stages a zip.
+# The shared module scripts never touch a pif file directly; they go through the
+# functions here. build.sh overlays exactly one adapter per build, so action.sh,
+# service.sh, pif_native_fetch.sh and customize.sh are identical in both.
 #
-# Fork reads custom.pif.prop, produced from pif.prop by its own migrate.sh, and
-# uses numeric spoof flags.
+# Fork's zygisk reads custom.pif.prop, which only its own migrate.sh can produce
+# from a pif.prop. Its spoof flags are numeric.
 
 ENGINE=fork
 ENGINE_NAME="PlayIntegrityFork"
 
-# Upstream files (shipped inside the PIF zip) that customize.sh installs.
-ENGINE_FILES="autopif4.sh killpi.sh migrate.sh common_setup.sh app_replace_list.txt example.pif.prop"
+# Upstream files (from the PIF zip) that customize.sh installs.
+ENGINE_FILES="autopif4.sh killpi.sh migrate.sh common_setup.sh example.pif.prop app_replace_list.txt"
 
-# Every prop file the STRONG flags must be enforced on, module dir first.
+# Prop files the STRONG flags are enforced on, module dir first.
 engine_pif_targets() {
     echo "$MODPATH/custom.pif.prop $MODPATH/pif.prop \
           $CONFIG_DIR/custom.pif.prop $CONFIG_DIR/pif.prop"
 }
 
-# The STRONG spoof settings, in this engine's own naming.
-#   spoofProvider=0        -> leave the keystore provider alone. TEESimulator
-#                             already supplies the hardware-attested keystore
-#                             STRONG needs; PIF must not override it.
-#   spoofVendingFinger=1   -> Play Store build spoof.
+# STRONG spoof settings in this engine's naming.
+#   spoofProvider=0        leave the keystore provider alone — TEESimulator
+#                          supplies the hardware-attested one STRONG needs.
+#   spoofVendingFinger=1   Play Store build spoof.
 engine_spoof_kv() {
     echo "spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 \
           spoofProps=1 spoofSignature=0 spoofVendingSdk=0"
 }
 
-# The spoof block appended to a freshly fetched fingerprint (pif.prop syntax).
+# Spoof block appended to a freshly fetched fingerprint.
 engine_spoof_block() {
     cat <<'EOF'
 spoofProvider=0
@@ -43,10 +41,9 @@ spoofVendingSdk=0
 EOF
 }
 
-# engine_install_pif SRC — put a fetched/static pif.prop where the zygisk reads
-# it. Fork's zygisk reads custom.pif.prop, which only migrate.sh can produce.
-# Returns non-zero when the engine cannot consume the file, so callers can fall
-# through to the next fingerprint source instead of reporting a false success.
+# engine_install_pif SRC — put a fingerprint where the zygisk reads it.
+# Non-zero when this engine can't consume SRC, so callers fall through to the
+# next fingerprint source instead of reporting a success that never landed.
 engine_install_pif() {
     _src="$1"
     [ -s "$_src" ] || return 1
@@ -55,15 +52,15 @@ engine_install_pif() {
     rm -f "$MODPATH/custom.pif.prop" "$MODPATH/custom.pif.json" 2>/dev/null
     sh "$MODPATH/migrate.sh" -i -a "$MODPATH/pif.prop" >/dev/null 2>&1
     [ -s "$MODPATH/custom.pif.prop" ] || return 1
-    # migrate.sh writes spoofProvider=1 / spoofVendingFinger=0 — a WEAK config
-    # that breaks STRONG. Re-enforce right here so every caller (boot, hourly,
-    # Action) is correct without needing its own enforce step.
+    # migrate.sh writes spoofProvider=1 / spoofVendingFinger=0, a WEAK config
+    # that breaks STRONG. Enforce here so every caller is correct without
+    # needing its own enforce step.
     engine_enforce_spoof
     return 0
 }
 
-# engine_autopif — upstream's own fetcher, used as the fallback when our native
-# crawl fails. Must leave the engine's prop file in place. Returns 0 on success.
+# engine_autopif — upstream's own fetcher; the fallback when our native crawl
+# fails. Leaves the engine's prop file in place. 0 on success.
 engine_autopif() {
     [ -f "$MODPATH/autopif4.sh" ] || return 1
     sh "$MODPATH/autopif4.sh" -s -m || return 1

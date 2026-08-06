@@ -9,9 +9,9 @@ unset ASH_STANDALONE
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 
 # --- Play Integrity engine adapter ---
-# Which prop file the zygisk reads, and under which spoof-flag names, is the one
-# thing that differs between the two builds. engine.sh (overlaid by build.sh)
-# owns it; everything below is identical in both.
+# Which prop file the zygisk reads, and what its spoof flags are called, is all
+# that differs between the two builds. engine.sh owns it; everything below is
+# identical in both.
 CONFIG_DIR=/data/adb/tricky_store
 if [ -f "$MODDIR/engine.sh" ]; then
     . "$MODDIR/engine.sh"
@@ -216,10 +216,9 @@ if [ ! -f "$MODDIR/.bootstrapped" ]; then
         sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2. fingerprint + security patch. Our native crawl is primary (fast, and it
-    #    installs through the engine adapter); upstream's own fetcher, whose crawl
-    #    hangs on some devices, is the fallback. Both end with the fingerprint in
-    #    the file this build's zygisk actually reads.
+    # 2. fingerprint + security patch. Our native crawl is primary; upstream's
+    #    fetcher, whose crawl hangs on some devices, is the fallback. Both end
+    #    with the fingerprint in the file this build's zygisk reads.
     FP_DONE=0
     if [ -x "$MODDIR/pif_native_fetch.sh" ]; then
         sh "$MODDIR/pif_native_fetch.sh" >/data/adb/tricky_store/autopif.log 2>&1 && FP_DONE=1
@@ -282,10 +281,9 @@ fi
                 engine_autopif 2>&1 | log -t "AlwaysStrong-hourly"
             fi
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
-            # enforce STRONG spoof settings — upstream's own fetcher resets them
-            # to a WEAK config (Fork's migrate.sh writes spoofProvider=1 /
-            # spoofVendingFinger=0). Without this the hourly refresh silently
-            # reverts the fingerprint to WEAK an hour after boot.
+            # upstream's fetcher resets these to a WEAK config (Fork's
+            # migrate.sh writes spoofProvider=1 / spoofVendingFinger=0), which
+            # would silently drop the verdict an hour after boot.
             engine_enforce_spoof
         fi
         if [ ! -f "$CFG/custom_keybox" ] && [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then

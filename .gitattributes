@@ -10,9 +10,8 @@ description.txt  text eol=lf
 update-binary    text eol=lf
 updater-script   text eol=lf
 
-# Build-time config sourced by build.sh. A CRLF checkout would put a CR inside
-# PIF_TAG, and the download URL then dies as "malformed" — the same failure the
-# upstream-update script once baked into build.sh.
+# Build-time config sourced by build.sh. A CRLF checkout puts a CR inside
+# PIF_TAG, and the download URL then dies as "malformed".
 *.conf       text eol=lf
 *.override   text eol=lf
 

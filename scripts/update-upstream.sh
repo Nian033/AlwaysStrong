@@ -9,12 +9,12 @@
 #   scripts/update-upstream.sh --apply --build   # bump, then rebuild everything
 #   scripts/update-upstream.sh --stable-only     # ignore prereleases
 #
-# Prereleases COUNT by default. TEESimulator-RS ships its newest builds as
-# prereleases (the "CI build" posted in the channel) — /releases/latest hides
-# those, which is why this used to report "up to date" against a newer upstream.
+# Prereleases count by default: TEESimulator-RS ships its newest builds that way
+# (the "CI build" posted in the channel), and /releases/latest hides them, so a
+# check that skipped prereleases would sit on a stale engine and call it current.
 #
 # Set GH_TOKEN (or GITHUB_TOKEN) to authenticate the API calls: unauthenticated
-# CI runners share a 60 req/h pool per IP and were getting rate-limited.
+# CI runners share a 60 req/h pool per IP and run into the limit.
 #
 # Exit codes:
 #   0  nothing to update
@@ -85,9 +85,9 @@ print(rel['tag_name'])
 print(assets(rel)[0])
 print('prerelease' if rel['prerelease'] else 'stable')
 " | tr -d '\r'
-    # ^ Windows Python writes CRLF. mapfile -t only strips the LF, so the CR rode
-    # along into the value and got baked INSIDE the quotes in build.sh
-    # (TEE_TAG_DEFAULT="v6.0.1-307<CR>"). Downloads then died on a malformed URL.
+    # ^ Windows Python writes CRLF and a read strips only the LF, so without this
+    # the CR ends up inside the quotes of the pin it patches
+    # (PIF_TAG="v4.7-inject-s<CR>") and the download URL dies as malformed.
 }
 
 # read_kv FILE KEY — the quoted value of a KEY="..." assignment

@@ -3,8 +3,8 @@
 # Downloads the upstream TEESimulator-RS + Play Integrity release ZIPs, overlays
 # our scripts, and repackages each release line into an installable Magisk ZIP.
 #
-# Both lines are built from THIS tree — there is no second branch. module/ holds
-# everything they share; module-variants/<line>/ holds the few files that differ:
+# module/ holds everything the two lines share; module-variants/<line>/ holds
+# what differs:
 #
 #   module-variants/<line>/build.conf            upstream pin + which files to lift
 #   module-variants/<line>/module.prop.override  module.prop keys to rewrite
@@ -34,8 +34,7 @@ set -euo pipefail
 
 # ---------- Configurable upstream versions ----------
 # TEESimulator-RS is shared by both lines and pinned here. Each line's Play
-# Integrity engine is pinned in its own module-variants/<line>/build.conf, so a
-# bump to one line cannot silently move the other.
+# Integrity engine is pinned in its own module-variants/<line>/build.conf.
 # Bump with: scripts/update-upstream.sh --apply
 TEE_TAG_DEFAULT="v6.0.1-307"
 TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-307-Release.zip"
@@ -67,9 +66,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# A stray CR in a pin turns the download URL into "…/v6.0.1-307<CR>/…", which
-# curl rejects as malformed — and it is invisible in the build log, since the CR
-# just returns the cursor. Strip it rather than debug it again.
+# A CR inside a pin makes the download URL "…/v6.0.1-307<CR>/…", which curl
+# rejects as malformed. Invisible in the log — a CR just returns the cursor.
 strip_cr() { printf '%s' "${1//$'\r'/}"; }
 TEE_TAG=$(strip_cr "$TEE_TAG")
 TEE_ASSET=$(strip_cr "$TEE_ASSET")
@@ -79,7 +77,6 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE_SRC="$ROOT/module"
 VARIANT_SRC="$ROOT/module-variants"
 BUILD="$ROOT/build"
-STAGE="$BUILD/stage"
 DL="$BUILD/downloads"
 OUT="$ROOT/out"
 
@@ -141,9 +138,8 @@ if [[ ${#VARIANTS[@]} -gt 1 ]] \
 fi
 
 # ---------- zip (or a 7-Zip stand-in) ----------
-# Git-Bash / MSYS boxes ship 7-Zip but no Info-ZIP `zip`, which used to stop the
-# build dead at the packaging step. Drop a tiny shim on PATH instead — it also
-# reaches the -inject sub-build, which runs its own copy of this script.
+# Git-Bash / MSYS boxes ship 7-Zip but no Info-ZIP `zip`. Rather than fail at
+# the packaging step, drop a shim on PATH.
 if ! command -v zip >/dev/null 2>&1; then
     SEVENZ=""
     for c in 7z 7za "/c/Program Files/7-Zip/7z.exe" "/c/Program Files (x86)/7-Zip/7z.exe"; do
@@ -318,9 +314,8 @@ else
 fi
 
 # ---------- Build one release line ----------
-# Everything below runs once per line in $VARIANTS. The line supplies its
-# upstream pin and its file lists via module-variants/<line>/build.conf; the
-# module scripts it overlays live in module-variants/<line>/ship/.
+# Runs once per line in $VARIANTS. The line supplies its upstream pin and file
+# lists via build.conf; the module scripts it overlays live in its ship/.
 BUILT_ZIPS=()
 
 build_variant() {
@@ -328,13 +323,11 @@ build_variant() {
   local VDIR="$VARIANT_SRC/$VARIANT"
   local STAGE="$BUILD/stage-$VARIANT"
 
-  # per-line settings — reset first so one line can never inherit another's
+  # reset first: a second line must not inherit the first one's settings
   local ZIP_SUFFIX="" PIF_REPO="" PIF_TAG="" PIF_ASSET="" PIF_ASSET_FILTER=""
   local PIF_FILES="" PIF_REQUIRED="" PIF_PATCH_PATHS="" PATCH_AUTOPIF4_WGET=0
-  # Source through a CR-stripped copy: .gitattributes forces LF on build.conf,
-  # but an editor or a tarball can still hand us CRLF, and a CR riding inside
-  # PIF_TAG turns the download URL into something curl rejects as malformed —
-  # invisible in the log, since a CR just returns the cursor.
+  # Sourced through a CR-stripped copy: .gitattributes pins build.conf to LF,
+  # but an editor or a tarball can still hand us CRLF.
   mkdir -p "$BUILD"
   tr -d '\r' < "$VDIR/build.conf" > "$BUILD/.build.conf.$VARIANT"
   # shellcheck source=/dev/null
@@ -376,14 +369,13 @@ if [[ -d "$VDIR/ship" ]]; then
     green "    overlaid module-variants/$VARIANT/ship/"
 fi
 
-# 1a2) Apply this line's module.prop overrides. version / versionCode are NOT
-#      overridable — they are defined once, in module/module.prop, so the two
-#      lines can never drift apart on the number users see.
+# 1a2) Apply this line's module.prop overrides. version / versionCode are not
+#      overridable: they stay defined once, in module/module.prop, so the two
+#      lines can't drift apart on the number users see.
 if [[ -f "$VDIR/module.prop.override" ]]; then
-    # Rewritten with awk, not sed: the replacement text is a description string,
-    # and in a sed replacement `&` expands to the whole match and `\` escapes —
-    # so a perfectly reasonable description would silently corrupt module.prop.
-    # awk takes the line as a variable and never reinterprets it.
+    # awk, not sed: the replacement is a description string, and in a sed
+    # replacement `&` expands to the whole match and `\` escapes. awk takes the
+    # line as a variable and never reinterprets it.
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
         local k="${line%%=*}"
@@ -452,8 +444,8 @@ for f in $PIF_FILES; do
         cp "$PIF_EXTRACT/$f" "$STAGE/$f"
     fi
 done
-# A silently-missing helper means the fingerprint refresh does nothing at run
-# time, which is invisible until someone's verdict quietly drops. Fail here.
+# A missing helper means the fingerprint refresh does nothing at run time, and
+# nothing says so until a verdict drops. Fail the build instead.
 for f in $PIF_REQUIRED; do
     [[ -f "$STAGE/$f" ]] \
         || die "$VARIANT: PIF zip has no $f — upstream layout changed, update module-variants/$VARIANT/build.conf"

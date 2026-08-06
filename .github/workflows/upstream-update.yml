@@ -5,10 +5,9 @@ name: Upstream update
 # build.sh for TEE, in module-variants/<line>/build.conf for the engines — the
 # zips are rebuilt to prove the new pins work, and one PR is opened.
 #
-# This used to fail — and email a red run — every morning: the API lookups were
-# unauthenticated, so the shared 60 req/h per-runner-IP pool ran out. They are
-# authenticated now, and a lookup that still fails is reported as a warning
-# instead of a failed job, so a flaky upstream never lands in your inbox.
+# The lookups are authenticated: unauthenticated runners share a 60 req/h pool
+# per IP and run into the limit. A lookup that fails anyway is reported as a
+# warning rather than a failed job, so a flaky upstream doesn't mail a red run.
 on:
   schedule:
     - cron: '0 6 * * 1'   # Mondays, 06:00 UTC

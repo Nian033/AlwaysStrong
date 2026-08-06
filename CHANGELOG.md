@@ -10,11 +10,11 @@ Newer TEE engine, a quieter installer, and both builds shipped from one release.
 **Install output**
 - Trimmed the noise: no more "default keybox installed", no "WebUI ready" (the WebUI is right there in your manager), and Zygisk just reports `zygisk found`. The KernelSU-without-Zygisk warning stays — that one silently costs you STRONG.
 
-**Per-app keybox, and everything else the default build was missing**
-- The default build gains the features that had only ever shipped in the `-inject` build: the multi-keybox WebUI (assign a specific keybox per app), the target-list rebuild that backs it, native fingerprint fetch via `asfetch autopif` (~2–5s instead of a ~24s shell crawl), and logcat / ANR / tombstone sanitisation. These were never engine-specific — they were simply stranded on the other branch.
+**Per-app keybox in the default build**
+- The default build gains what had only shipped in the `-inject` one: the multi-keybox WebUI (assign a keybox per app), the target-list rebuild behind it, native fingerprint fetch via `asfetch autopif` (~2–5s, against ~24s for the shell crawl), and logcat / ANR / tombstone sanitisation. None of it was engine-specific.
 
 **One tree, two builds**
-- The two release lines were separate git branches, so every fix had to be written twice and the features above silently sat on one side for a release. They are now one tree: `module/` is shared, and `module-variants/<line>/` holds the handful of files that genuinely differ — an `engine.sh` adapter that says which prop file that engine's zygisk reads, what its spoof flags are called, and how its fetcher is invoked. A single `./build.sh` emits both zips, and `version` is defined once so they cannot disagree.
+- The two lines were separate branches, which meant writing every fix twice. They share one tree now: `module/` for everything common, `module-variants/<line>/` for what differs — chiefly an `engine.sh` adapter naming the prop file that engine's zygisk reads, its spoof-flag names, and how its fetcher runs. One `./build.sh` emits both zips, and `version` is defined once.
 
 **Architectures**
 - The `-inject` build installs on x86 / x86_64 instead of aborting, and now carries x86 TEE libraries and watcher. Its Play Integrity spoof is still ARM-only — PlayIntegrityFix inject-s builds no x86 zygisk — so on x86 the installer says so and points at the default build.
