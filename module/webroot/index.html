@@ -254,15 +254,17 @@ h1{
   align-items:center;gap:8px;flex-wrap:wrap;
   animation:rise .5s cubic-bezier(.2,.7,.2,1) both;animation-delay:.2s;
 }
-.foot a{
+.foot a,.foot button.foot-btn{
   display:inline-flex;align-items:center;gap:7px;
   color:var(--muted);text-decoration:none;font-size:13px;font-weight:500;
   padding:8px 12px;border-radius:10px;
   transition:color .14s,background .14s,transform .12s;
 }
-.foot a:hover{color:var(--fg);background:color-mix(in srgb,var(--muted) 8%,transparent)}
-.foot a:active{transform:scale(.96)}
-.foot a svg{width:15px;height:15px;flex-shrink:0;display:block}
+.foot button.foot-btn{background:none;border:0;cursor:pointer;font-family:inherit}
+.foot a:hover,.foot button.foot-btn:hover{color:var(--fg);background:color-mix(in srgb,var(--muted) 8%,transparent)}
+.foot a:active,.foot button.foot-btn:active{transform:scale(.96)}
+.foot button.foot-btn[disabled]{opacity:.55;pointer-events:none}
+.foot a svg,.foot button.foot-btn svg{width:15px;height:15px;flex-shrink:0;display:block}
 .foot a.tg svg{color:var(--tg)}
 .foot a.dn svg{color:var(--heart)}
 
@@ -476,6 +478,10 @@ h1{
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-7-4.35-7-10.5C5 7.5 7.5 5 10.5 5 12 5 12 6 12 6s0-1 1.5-1C16.5 5 19 7.5 19 10.5 19 16.65 12 21 12 21z"/></svg>
     <span data-i="donate">Donate</span>
   </a>
+  <button class="foot-btn" id="logBtn" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg>
+    <span id="logBtnLbl" data-i="logs">Collect logs</span>
+  </button>
 </div>
 
 <div class="fm" id="fm" hidden>
@@ -559,21 +565,21 @@ h1{
 
 <script>
 const I={
-  en:{auto:"Configuration",fp_t:"Fingerprint",fp_s:"Automatic Pixel Canary refresh",kb_t:"Keybox",kb_s:"Auto check, writes only if newer",status:"Keybox status",ind_t:"Status indicator",ind_s:"Show status prefix in description",rs_t:"Block ROM spoof",rs_s:"Disable PixelProps / pihooks engines",int_t:"Check every",donate:"Donate",ckbx:"Custom keybox",ck_t:"Custom keybox",ck_s:"Use your own keybox — auto-fetch off",ck_pick:"Select keybox file",ck_none:"No file selected",ck_have:"keybox.xml",ck_bad:"Not a valid keybox",ck_sel:"Selected keybox:",fm_new:"Newest",fm_old:"Oldest",fm_empty:"Empty folder",fm_cancel:"Cancel",pak:"Target apps",pak_t:"Target apps",pak_s:"Choose apps, mode & keybox",pak_search:"Search apps",pak_default:"Default keybox",pak_import:"Import keybox file…",pak_mode:"Mode",pak_auto:"Auto",pak_auto_s:"Let AlwaysStrong decide",pak_gen:"Generate",pak_gen_s:"Generate the full cert chain (!)",pak_hack:"Hack",pak_hack_s:"Hack the leaf cert (?)",pak_keybox:"Keybox",pak_apply:"Apply",pak_ok:"OK"},
-  tr:{auto:"Yapılandırma",fp_t:"Fingerprint",fp_s:"Otomatik Pixel Canary yenileme",kb_t:"Keybox",kb_s:"Otomatik kontrol, sadece yeniyse yazar",status:"Keybox durumu",ind_t:"Durum göstergesi",ind_s:"Açıklamada durum öneki göster",rs_t:"ROM spoofunu engelle",rs_s:"PixelProps / pihooks motorlarını kapat",int_t:"Kontrol aralığı",donate:"Bağış",ckbx:"Özel keybox",ck_t:"Özel keybox",ck_s:"Kendi keyboxını kullan — oto çekme kapalı",ck_pick:"Keybox dosyası seç",ck_none:"Dosya seçilmedi",ck_have:"keybox.xml",ck_bad:"Geçerli keybox değil",ck_sel:"Seçili keybox:",fm_new:"En yeni",fm_old:"En eski",fm_empty:"Boş klasör",fm_cancel:"İptal",pak:"Hedef uygulamalar",pak_t:"Hedef uygulamalar",pak_s:"Uygulama, mod & keybox seç",pak_search:"Uygulama ara",pak_default:"Varsayılan keybox",pak_import:"Keybox dosyası içe aktar…",pak_mode:"Mod",pak_auto:"Oto",pak_auto_s:"AlwaysStrong karar versin",pak_gen:"Üret (Generate)",pak_gen_s:"Tüm sertifika zincirini üret (!)",pak_hack:"Hack",pak_hack_s:"Leaf sertifikayı değiştir (?)",pak_keybox:"Keybox",pak_apply:"Uygula",pak_ok:"Tamam"},
-  ru:{auto:"Автообновление",fp_t:"Fingerprint",fp_s:"Ежечасно с Pixel Canary",kb_t:"Keybox",kb_s:"Ежечасно проверка, запись только если новее",status:"Статус keybox",ind_t:"Индикатор",ind_s:"Показывать префикс в описании",rs_t:"Блок ROM-спуфа",rs_s:"Отключить PixelProps / pihooks",int_t:"Интервал",donate:"Поддержать"},
-  es:{auto:"Actualización automática",fp_t:"Fingerprint",fp_s:"Refresco horario desde Pixel Canary",kb_t:"Keybox",kb_s:"Comprobación horaria, escribe solo si es nuevo",status:"Estado del keybox",ind_t:"Indicador",ind_s:"Mostrar prefijo de estado en la descripción",rs_t:"Bloquear ROM spoof",rs_s:"Desactivar PixelProps / pihooks",int_t:"Intervalo",donate:"Donar"},
-  pt:{auto:"Atualização automática",fp_t:"Fingerprint",fp_s:"Atualização horária do Pixel Canary",kb_t:"Keybox",kb_s:"Verificação horária, grava só se for novo",status:"Status do keybox",ind_t:"Indicador",ind_s:"Mostrar prefixo de status na descrição",rs_t:"Bloquear ROM spoof",rs_s:"Desativar PixelProps / pihooks",int_t:"Intervalo",donate:"Doar"},
-  de:{auto:"Auto-Update",fp_t:"Fingerprint",fp_s:"Stündliche Pixel-Canary-Aktualisierung",kb_t:"Keybox",kb_s:"Stündlich prüfen, nur bei Neuerem schreiben",status:"Keybox-Status",ind_t:"Statusanzeige",ind_s:"Statuspräfix in der Beschreibung",rs_t:"ROM-Spoof blockieren",rs_s:"PixelProps / pihooks deaktivieren",int_t:"Intervall",donate:"Spenden"},
-  fr:{auto:"Mise à jour auto",fp_t:"Fingerprint",fp_s:"Rafraîchissement horaire depuis Pixel Canary",kb_t:"Keybox",kb_s:"Vérification horaire, écrit seulement si plus récent",status:"Statut keybox",ind_t:"Indicateur",ind_s:"Afficher le préfixe d'état",rs_t:"Bloquer le spoof ROM",rs_s:"Désactiver PixelProps / pihooks",int_t:"Intervalle",donate:"Faire un don"},
-  it:{auto:"Aggiornamento automatico",fp_t:"Fingerprint",fp_s:"Aggiornamento orario da Pixel Canary",kb_t:"Keybox",kb_s:"Controllo orario, scrive solo se più recente",status:"Stato keybox",ind_t:"Indicatore",ind_s:"Mostra prefisso di stato",rs_t:"Blocca spoof ROM",rs_s:"Disattiva PixelProps / pihooks",int_t:"Intervallo",donate:"Dona"},
-  id:{auto:"Pembaruan otomatis",fp_t:"Fingerprint",fp_s:"Penyegaran tiap jam dari Pixel Canary",kb_t:"Keybox",kb_s:"Cek tiap jam, hanya tulis jika lebih baru",status:"Status keybox",ind_t:"Indikator",ind_s:"Tampilkan awalan status di deskripsi",rs_t:"Blokir spoof ROM",rs_s:"Nonaktifkan PixelProps / pihooks",int_t:"Interval",donate:"Donasi"},
-  vi:{auto:"Tự cập nhật",fp_t:"Fingerprint",fp_s:"Làm mới mỗi giờ từ Pixel Canary",kb_t:"Keybox",kb_s:"Kiểm tra mỗi giờ, chỉ ghi khi mới hơn",status:"Trạng thái keybox",ind_t:"Chỉ báo",ind_s:"Hiện tiền tố trạng thái trong mô tả",rs_t:"Chặn giả mạo ROM",rs_s:"Vô hiệu hóa PixelProps / pihooks",int_t:"Khoảng kiểm tra",donate:"Quyên góp"},
-  ar:{auto:"تحديث تلقائي",fp_t:"البصمة",fp_s:"تحديث كل ساعة من Pixel Canary",kb_t:"Keybox",kb_s:"فحص كل ساعة، يكتب فقط إذا كان أحدث",status:"حالة keybox",ind_t:"مؤشر الحالة",ind_s:"عرض بادئة الحالة في الوصف",rs_t:"حظر انتحال ROM",rs_s:"تعطيل PixelProps / pihooks",int_t:"التحقق كل",donate:"تبرع"},
-  zh:{auto:"自动更新",fp_t:"指纹",fp_s:"每小时从 Pixel Canary 刷新",kb_t:"Keybox",kb_s:"每小时检查，仅在更新时写入",status:"Keybox 状态",ind_t:"状态指示",ind_s:"在描述中显示状态前缀",rs_t:"屏蔽 ROM 伪装",rs_s:"禁用 PixelProps / pihooks",int_t:"检查间隔",donate:"捐赠"},
-  ja:{auto:"自動更新",fp_t:"フィンガープリント",fp_s:"Pixel Canaryから毎時更新",kb_t:"Keybox",kb_s:"毎時チェック、新しい場合のみ書き込み",status:"Keybox の状態",ind_t:"ステータス表示",ind_s:"説明にステータスプレフィックスを表示",rs_t:"ROM 偽装をブロック",rs_s:"PixelProps / pihooks を無効化",int_t:"チェック間隔",donate:"寄付"},
-  ko:{auto:"자동 업데이트",fp_t:"지문",fp_s:"매시간 Pixel Canary에서 새로고침",kb_t:"Keybox",kb_s:"매시간 확인, 새 것일 때만 기록",status:"Keybox 상태",ind_t:"상태 표시",ind_s:"설명에 상태 접두사 표시",rs_t:"ROM 스푸핑 차단",rs_s:"PixelProps / pihooks 비활성화",int_t:"확인 간격",donate:"후원"},
-  hi:{auto:"स्वतः अपडेट",fp_t:"फिंगरप्रिंट",fp_s:"हर घंटे Pixel Canary से ताज़ा",kb_t:"Keybox",kb_s:"हर घंटे जाँच, नया होने पर ही लिखें",status:"Keybox स्थिति",ind_t:"स्थिति संकेतक",ind_s:"विवरण में स्थिति उपसर्ग दिखाएं",rs_t:"ROM स्पूफ ब्लॉक करें",rs_s:"PixelProps / pihooks बंद करें",int_t:"हर बार जाँच",donate:"दान"},
+  en:{auto:"Configuration",fp_t:"Fingerprint",fp_s:"Automatic Pixel Canary refresh",kb_t:"Keybox",kb_s:"Auto check, writes only if newer",status:"Keybox status",ind_t:"Status indicator",ind_s:"Show status prefix in description",rs_t:"Block ROM spoof",rs_s:"Disable PixelProps / pihooks engines",int_t:"Check every",donate:"Donate",ckbx:"Custom keybox",ck_t:"Custom keybox",ck_s:"Use your own keybox — auto-fetch off",ck_pick:"Select keybox file",ck_none:"No file selected",ck_have:"keybox.xml",ck_bad:"Not a valid keybox",ck_sel:"Selected keybox:",fm_new:"Newest",fm_old:"Oldest",fm_empty:"Empty folder",fm_cancel:"Cancel",pak:"Target apps",pak_t:"Target apps",pak_s:"Choose apps, mode & keybox",pak_search:"Search apps",pak_default:"Default keybox",pak_import:"Import keybox file…",pak_mode:"Mode",pak_auto:"Auto",pak_auto_s:"Let AlwaysStrong decide",pak_gen:"Generate",pak_gen_s:"Generate the full cert chain (!)",pak_hack:"Hack",pak_hack_s:"Hack the leaf cert (?)",pak_keybox:"Keybox",pak_apply:"Apply",pak_ok:"OK",logs:"Collect logs",logs_run:"Collecting…",logs_done:"Saved:",logs_fail:"Failed — run via root shell"},
+  tr:{auto:"Yapılandırma",fp_t:"Fingerprint",fp_s:"Otomatik Pixel Canary yenileme",kb_t:"Keybox",kb_s:"Otomatik kontrol, sadece yeniyse yazar",status:"Keybox durumu",ind_t:"Durum göstergesi",ind_s:"Açıklamada durum öneki göster",rs_t:"ROM spoofunu engelle",rs_s:"PixelProps / pihooks motorlarını kapat",int_t:"Kontrol aralığı",donate:"Bağış",ckbx:"Özel keybox",ck_t:"Özel keybox",ck_s:"Kendi keyboxını kullan — oto çekme kapalı",ck_pick:"Keybox dosyası seç",ck_none:"Dosya seçilmedi",ck_have:"keybox.xml",ck_bad:"Geçerli keybox değil",ck_sel:"Seçili keybox:",fm_new:"En yeni",fm_old:"En eski",fm_empty:"Boş klasör",fm_cancel:"İptal",pak:"Hedef uygulamalar",pak_t:"Hedef uygulamalar",pak_s:"Uygulama, mod & keybox seç",pak_search:"Uygulama ara",pak_default:"Varsayılan keybox",pak_import:"Keybox dosyası içe aktar…",pak_mode:"Mod",pak_auto:"Oto",pak_auto_s:"AlwaysStrong karar versin",pak_gen:"Üret (Generate)",pak_gen_s:"Tüm sertifika zincirini üret (!)",pak_hack:"Hack",pak_hack_s:"Leaf sertifikayı değiştir (?)",pak_keybox:"Keybox",pak_apply:"Uygula",pak_ok:"Tamam",logs:"Log topla",logs_run:"Toplanıyor…",logs_done:"Kaydedildi:",logs_fail:"Başarısız — root shell'den çalıştır"},
+  ru:{auto:"Автообновление",fp_t:"Fingerprint",fp_s:"Ежечасно с Pixel Canary",kb_t:"Keybox",kb_s:"Ежечасно проверка, запись только если новее",status:"Статус keybox",ind_t:"Индикатор",ind_s:"Показывать префикс в описании",rs_t:"Блок ROM-спуфа",rs_s:"Отключить PixelProps / pihooks",int_t:"Интервал",donate:"Поддержать",logs:"Собрать логи",logs_run:"Сбор…",logs_done:"Сохранено:",logs_fail:"Ошибка — запустите через root shell"},
+  es:{auto:"Actualización automática",fp_t:"Fingerprint",fp_s:"Refresco horario desde Pixel Canary",kb_t:"Keybox",kb_s:"Comprobación horaria, escribe solo si es nuevo",status:"Estado del keybox",ind_t:"Indicador",ind_s:"Mostrar prefijo de estado en la descripción",rs_t:"Bloquear ROM spoof",rs_s:"Desactivar PixelProps / pihooks",int_t:"Intervalo",donate:"Donar",logs:"Recoger registros",logs_run:"Recogiendo…",logs_done:"Guardado:",logs_fail:"Falló — ejecuta desde una shell root"},
+  pt:{auto:"Atualização automática",fp_t:"Fingerprint",fp_s:"Atualização horária do Pixel Canary",kb_t:"Keybox",kb_s:"Verificação horária, grava só se for novo",status:"Status do keybox",ind_t:"Indicador",ind_s:"Mostrar prefixo de status na descrição",rs_t:"Bloquear ROM spoof",rs_s:"Desativar PixelProps / pihooks",int_t:"Intervalo",donate:"Doar",logs:"Coletar logs",logs_run:"Coletando…",logs_done:"Salvo:",logs_fail:"Falhou — execute via shell root"},
+  de:{auto:"Auto-Update",fp_t:"Fingerprint",fp_s:"Stündliche Pixel-Canary-Aktualisierung",kb_t:"Keybox",kb_s:"Stündlich prüfen, nur bei Neuerem schreiben",status:"Keybox-Status",ind_t:"Statusanzeige",ind_s:"Statuspräfix in der Beschreibung",rs_t:"ROM-Spoof blockieren",rs_s:"PixelProps / pihooks deaktivieren",int_t:"Intervall",donate:"Spenden",logs:"Logs sammeln",logs_run:"Sammle…",logs_done:"Gespeichert:",logs_fail:"Fehlgeschlagen — per Root-Shell ausführen"},
+  fr:{auto:"Mise à jour auto",fp_t:"Fingerprint",fp_s:"Rafraîchissement horaire depuis Pixel Canary",kb_t:"Keybox",kb_s:"Vérification horaire, écrit seulement si plus récent",status:"Statut keybox",ind_t:"Indicateur",ind_s:"Afficher le préfixe d'état",rs_t:"Bloquer le spoof ROM",rs_s:"Désactiver PixelProps / pihooks",int_t:"Intervalle",donate:"Faire un don",logs:"Collecter les journaux",logs_run:"Collecte…",logs_done:"Enregistré :",logs_fail:"Échec — lancez via un shell root"},
+  it:{auto:"Aggiornamento automatico",fp_t:"Fingerprint",fp_s:"Aggiornamento orario da Pixel Canary",kb_t:"Keybox",kb_s:"Controllo orario, scrive solo se più recente",status:"Stato keybox",ind_t:"Indicatore",ind_s:"Mostra prefisso di stato",rs_t:"Blocca spoof ROM",rs_s:"Disattiva PixelProps / pihooks",int_t:"Intervallo",donate:"Dona",logs:"Raccogli log",logs_run:"Raccolta…",logs_done:"Salvato:",logs_fail:"Non riuscito — esegui da shell root"},
+  id:{auto:"Pembaruan otomatis",fp_t:"Fingerprint",fp_s:"Penyegaran tiap jam dari Pixel Canary",kb_t:"Keybox",kb_s:"Cek tiap jam, hanya tulis jika lebih baru",status:"Status keybox",ind_t:"Indikator",ind_s:"Tampilkan awalan status di deskripsi",rs_t:"Blokir spoof ROM",rs_s:"Nonaktifkan PixelProps / pihooks",int_t:"Interval",donate:"Donasi",logs:"Kumpulkan log",logs_run:"Mengumpulkan…",logs_done:"Disimpan:",logs_fail:"Gagal — jalankan lewat root shell"},
+  vi:{auto:"Tự cập nhật",fp_t:"Fingerprint",fp_s:"Làm mới mỗi giờ từ Pixel Canary",kb_t:"Keybox",kb_s:"Kiểm tra mỗi giờ, chỉ ghi khi mới hơn",status:"Trạng thái keybox",ind_t:"Chỉ báo",ind_s:"Hiện tiền tố trạng thái trong mô tả",rs_t:"Chặn giả mạo ROM",rs_s:"Vô hiệu hóa PixelProps / pihooks",int_t:"Khoảng kiểm tra",donate:"Quyên góp",logs:"Thu thập nhật ký",logs_run:"Đang thu thập…",logs_done:"Đã lưu:",logs_fail:"Thất bại — chạy qua root shell"},
+  ar:{auto:"تحديث تلقائي",fp_t:"البصمة",fp_s:"تحديث كل ساعة من Pixel Canary",kb_t:"Keybox",kb_s:"فحص كل ساعة، يكتب فقط إذا كان أحدث",status:"حالة keybox",ind_t:"مؤشر الحالة",ind_s:"عرض بادئة الحالة في الوصف",rs_t:"حظر انتحال ROM",rs_s:"تعطيل PixelProps / pihooks",int_t:"التحقق كل",donate:"تبرع",logs:"جمع السجلات",logs_run:"يجري الجمع…",logs_done:"تم الحفظ:",logs_fail:"فشل — شغّله عبر صدفة الجذر"},
+  zh:{auto:"自动更新",fp_t:"指纹",fp_s:"每小时从 Pixel Canary 刷新",kb_t:"Keybox",kb_s:"每小时检查，仅在更新时写入",status:"Keybox 状态",ind_t:"状态指示",ind_s:"在描述中显示状态前缀",rs_t:"屏蔽 ROM 伪装",rs_s:"禁用 PixelProps / pihooks",int_t:"检查间隔",donate:"捐赠",logs:"收集日志",logs_run:"收集中…",logs_done:"已保存：",logs_fail:"失败 — 请通过 root shell 运行"},
+  ja:{auto:"自動更新",fp_t:"フィンガープリント",fp_s:"Pixel Canaryから毎時更新",kb_t:"Keybox",kb_s:"毎時チェック、新しい場合のみ書き込み",status:"Keybox の状態",ind_t:"ステータス表示",ind_s:"説明にステータスプレフィックスを表示",rs_t:"ROM 偽装をブロック",rs_s:"PixelProps / pihooks を無効化",int_t:"チェック間隔",donate:"寄付",logs:"ログを収集",logs_run:"収集中…",logs_done:"保存しました:",logs_fail:"失敗 — root シェルで実行してください"},
+  ko:{auto:"자동 업데이트",fp_t:"지문",fp_s:"매시간 Pixel Canary에서 새로고침",kb_t:"Keybox",kb_s:"매시간 확인, 새 것일 때만 기록",status:"Keybox 상태",ind_t:"상태 표시",ind_s:"설명에 상태 접두사 표시",rs_t:"ROM 스푸핑 차단",rs_s:"PixelProps / pihooks 비활성화",int_t:"확인 간격",donate:"후원",logs:"로그 수집",logs_run:"수집 중…",logs_done:"저장됨:",logs_fail:"실패 — 루트 셸에서 실행하세요"},
+  hi:{auto:"स्वतः अपडेट",fp_t:"फिंगरप्रिंट",fp_s:"हर घंटे Pixel Canary से ताज़ा",kb_t:"Keybox",kb_s:"हर घंटे जाँच, नया होने पर ही लिखें",status:"Keybox स्थिति",ind_t:"स्थिति संकेतक",ind_s:"विवरण में स्थिति उपसर्ग दिखाएं",rs_t:"ROM स्पूफ ब्लॉक करें",rs_s:"PixelProps / pihooks बंद करें",int_t:"हर बार जाँच",donate:"दान",logs:"लॉग एकत्र करें",logs_run:"एकत्र हो रहा…",logs_done:"सहेजा गया:",logs_fail:"विफल — रूट शेल से चलाएँ"},
 };
 const RTL=new Set(["ar","he","fa","ur"]);
 const NAMES={en:"English",tr:"Türkçe",ru:"Русский",es:"Español",pt:"Português",de:"Deutsch",fr:"Français",it:"Italiano",id:"Bahasa Indonesia",vi:"Tiếng Việt",ar:"العربية",zh:"中文",ja:"日本語",ko:"한국어",hi:"हिन्दी"};
@@ -659,6 +665,24 @@ const KEYBOX=CFG+"/keybox.xml";
 const INT_FILE=CFG+"/hourly_interval_sec";
 const MOD="/data/adb/modules/tricky_store";
 const KEY_HOST="http://evoker.qzz.io";
+
+// Collect logs -> /sdcard/AlwaysStrong-log.txt, for attaching to a GitHub issue.
+const logBtn=document.getElementById("logBtn");
+if(logBtn){
+  const logLbl=document.getElementById("logBtnLbl");
+  logBtn.addEventListener("click",async()=>{
+    const idle=(T.logs||"Collect logs");
+    logBtn.disabled=true; logLbl.textContent=(T.logs_run||"Collecting…");
+    const r=await ksuExec(`sh ${MOD}/collect_logs.sh`);
+    const path=(r.stdout||"").trim().split("\n").pop();
+    if(r.errno===0 && path){
+      logLbl.textContent=(T.logs_done||"Saved:")+" "+path;
+    }else{
+      logLbl.textContent=(T.logs_fail||"Failed — run via root shell");
+    }
+    setTimeout(()=>{ logLbl.textContent=idle; logBtn.disabled=false; },6000);
+  });
+}
 
 // Current repo keybox name (evokerrkeyNN) from /meta.json — display only; the
 // keybox itself is still fetched from /key. Fetched once, used by the status

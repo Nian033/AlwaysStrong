@@ -12,6 +12,13 @@ cd "$MODPATH" 2>/dev/null
 set +o standalone 2>/dev/null
 unset ASH_STANDALONE
 
+# `action.sh logs` — dump a diagnostic bundle for a GitHub issue and exit.
+if [ "$1" = "logs" ] && [ -x "$MODPATH/collect_logs.sh" ]; then
+    p=$(sh "$MODPATH/collect_logs.sh")
+    echo "log written to: $p"
+    exit 0
+fi
+
 CONFIG_DIR=/data/adb/tricky_store
 LINE="========================="
 VER=$(grep -m1 '^version=' "$MODPATH/module.prop" 2>/dev/null | cut -d= -f2-)
