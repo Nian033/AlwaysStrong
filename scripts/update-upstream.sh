@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Check (and optionally apply) latest TEESimulator-RS and PlayIntegrityFork releases.
+# Check (and optionally apply) the latest upstream releases for every part of
+# AlwaysStrong: the shared TEESimulator-RS pin in build.sh, plus each release
+# line's own Play Integrity pin in module-variants/<line>/build.conf.
 #
 # Usage:
-#   scripts/update-upstream.sh            # dry-run, print whether anything is newer
-#   scripts/update-upstream.sh --apply    # bump build.sh pinned tags to latest
-#   scripts/update-upstream.sh --apply --build   # also re-run build.sh after patching
+#   scripts/update-upstream.sh                   # dry-run, report what is newer
+#   scripts/update-upstream.sh --apply           # bump the pins
+#   scripts/update-upstream.sh --apply --build   # bump, then rebuild everything
 #   scripts/update-upstream.sh --stable-only     # ignore prereleases
 #
 # Prereleases COUNT by default. TEESimulator-RS ships its newest builds as
@@ -37,6 +39,7 @@ done
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_SH="$ROOT/build.sh"
+VARIANT_SRC="$ROOT/module-variants"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
 need curl
@@ -51,8 +54,9 @@ CURL_AUTH=()
 
 api_latest() {
     # Newest release (prereleases included unless --stable-only) plus the asset
-    # name we care about. PIF ships one .zip per release; TEE ships Debug +
-    # Release — we always pick the Release one. Drafts are always skipped.
+    # name we care about. Repos that publish several variants per release are
+    # narrowed by $2; TEE ships Debug + Release, so we ask for "Release".
+    # Drafts are always skipped.
     local repo="$1" prefer="$2"
     curl -sSL --retry 2 --max-time 30 "${CURL_AUTH[@]}" \
         -H 'Accept: application/vnd.github+json' \
@@ -63,15 +67,22 @@ raw = json.load(sys.stdin)
 if isinstance(raw, dict):                       # rate limit / 404 -> {'message': ...}
     sys.exit('github api: ' + raw.get('message', 'unexpected response'))
 allow_pre = '$ALLOW_PRE' == '1'
-rels = [r for r in raw if not r['draft'] and (allow_pre or not r['prerelease'])]
-rels = [r for r in rels if any(a['name'].endswith('.zip') for a in r.get('assets', []))]
-if not rels:
-    sys.exit('no release with a .zip asset in ${repo}')
-rel = max(rels, key=lambda r: r['published_at'])
-names = [a['name'] for a in rel['assets'] if a['name'].endswith('.zip')]
 prefer = '$prefer'
+rels = [r for r in raw if not r['draft'] and (allow_pre or not r['prerelease'])]
+def assets(r):
+    # newest upload first, so a re-cut revision within one tag (e.g.
+    # PlayIntegrityFix_v4.7-1-inject-s.zip replacing …_v4.7-inject-s.zip) wins
+    # instead of whichever order the API happened to return
+    a = sorted((x for x in r.get('assets', []) if x['name'].endswith('.zip')),
+               key=lambda x: x.get('created_at', ''), reverse=True)
+    n = [x['name'] for x in a]
+    return [x for x in n if prefer in x] or ([] if prefer else n)
+rels = [r for r in rels if assets(r)]
+if not rels:
+    sys.exit('no release with a matching .zip asset in ${repo}')
+rel = max(rels, key=lambda r: r['published_at'])
 print(rel['tag_name'])
-print(next((n for n in names if prefer and prefer in n), names[0]))
+print(assets(rel)[0])
 print('prerelease' if rel['prerelease'] else 'stable')
 " | tr -d '\r'
     # ^ Windows Python writes CRLF. mapfile -t only strips the LF, so the CR rode
@@ -79,66 +90,78 @@ print('prerelease' if rel['prerelease'] else 'stable')
     # (TEE_TAG_DEFAULT="v6.0.1-307<CR>"). Downloads then died on a malformed URL.
 }
 
-current_value() {
-    grep -E "^$1=" "$BUILD_SH" | head -1 | cut -d= -f2- | tr -d '\"'
+# read_kv FILE KEY — the quoted value of a KEY="..." assignment
+read_kv() { sed -n "s/^$2=\"\{0,1\}//p" "$1" | head -1 | sed 's/"$//'; }
+
+# patch_kv FILE KEY VALUE
+patch_kv() {
+    local file="$1" key="$2" val="${3//$'\r'/}"
+    grep -qE "^${key}=" "$file" || return 0
+    sed -i.bak "s|^${key}=.*|${key}=\"${val}\"|" "$file" && rm -f "$file.bak"
 }
-
-echo '==> Querying upstream GitHub releases'
-mapfile -t TEE < <(api_latest "Enginex0/TEESimulator-RS" "Release")
-mapfile -t PIF < <(api_latest "osm0sis/PlayIntegrityFork" "")
-
-TEE_TAG_NEW="${TEE[0]}"; TEE_ASSET_NEW="${TEE[1]}"; TEE_KIND="${TEE[2]:-}"
-PIF_TAG_NEW="${PIF[0]}"; PIF_ASSET_NEW="${PIF[1]}"; PIF_KIND="${PIF[2]:-}"
-
-[[ -n "$TEE_TAG_NEW" && -n "$TEE_ASSET_NEW" ]] || { echo "TEE lookup failed" >&2; exit 1; }
-[[ -n "$PIF_TAG_NEW" && -n "$PIF_ASSET_NEW" ]] || { echo "PIF lookup failed" >&2; exit 1; }
-
-TEE_TAG_CUR=$(current_value TEE_TAG_DEFAULT)
-TEE_ASSET_CUR=$(current_value TEE_ASSET_DEFAULT)
-PIF_TAG_CUR=$(current_value PIF_TAG_DEFAULT)
-PIF_ASSET_CUR=$(current_value PIF_ASSET_DEFAULT)
-
-echo "    TEE: $TEE_TAG_CUR  ->  $TEE_TAG_NEW   ($TEE_ASSET_NEW, $TEE_KIND)"
-echo "    PIF: $PIF_TAG_CUR  ->  $PIF_TAG_NEW   ($PIF_ASSET_NEW, $PIF_KIND)"
-
-# --- the other release line -------------------------------------------------
-# build.sh emits BOTH zips from one run, but each line pins its own upstream in
-# its own branch's build.sh — so checking only this branch silently leaves the
-# sibling on a stale engine. Report it here (read-only: patching another branch
-# from a working tree you are not on is how you lose edits) and say how to apply.
-sibling_report() {
-    local ref sib_build sib_repo sib_tag sib_prefer
-    if grep -q 'KOWX712/PlayIntegrityFix' "$BUILD_SH"; then ref=main; else ref=inject; fi
-    git -C "$ROOT" rev-parse --verify -q "${ref}^{commit}" >/dev/null 2>&1 || return 0
-
-    sib_build=$(git -C "$ROOT" show "${ref}:build.sh" 2>/dev/null) || return 0
-    # the PIF download line specifically — TEE's URL sits above it in build.sh
-    sib_repo=$(printf '%s' "$sib_build" \
-        | grep -F 'releases/download/$PIF_TAG' \
-        | grep -oE 'github\.com/[^/]+/[^/]+/releases/download' | head -1 \
-        | cut -d/ -f2,3)
-    sib_tag=$(printf '%s' "$sib_build" | sed -n 's/^PIF_TAG_DEFAULT="\(.*\)"/\1/p' | head -1)
-    [[ -n "$sib_repo" && -n "$sib_tag" ]] || return 0
-    case "$sib_repo" in *PlayIntegrityFix*) sib_prefer=inject-s ;; *) sib_prefer="" ;; esac
-
-    local out
-    out=$(api_latest "$sib_repo" "$sib_prefer") || return 0
-    local new_tag
-    new_tag=$(printf '%s' "$out" | sed -n 1p | tr -d '\r')
-    [[ -n "$new_tag" ]] || return 0
-
-    if [[ "$sib_tag" == "$new_tag" ]]; then
-        echo "    $ref line: $sib_tag (up to date, $sib_repo)"
-    else
-        echo "    $ref line: $sib_tag  ->  $new_tag   ($sib_repo)"
-        echo "               apply with: git checkout $ref && scripts/update-upstream.sh --apply"
-    fi
-}
-sibling_report
 
 CHANGED=0
-[[ "$TEE_TAG_CUR" != "$TEE_TAG_NEW" || "$TEE_ASSET_CUR" != "$TEE_ASSET_NEW" ]] && CHANGED=1
-[[ "$PIF_TAG_CUR" != "$PIF_TAG_NEW" || "$PIF_ASSET_CUR" != "$PIF_ASSET_NEW" ]] && CHANGED=1
+FAILED=0
+
+echo '==> Querying upstream GitHub releases'
+
+# ---------------------------------------------- shared attestation engine ----
+if TEE_OUT=$(api_latest "Enginex0/TEESimulator-RS" "Release"); then
+    TEE_TAG_NEW=$(sed -n 1p <<<"$TEE_OUT")
+    TEE_ASSET_NEW=$(sed -n 2p <<<"$TEE_OUT")
+    TEE_KIND=$(sed -n 3p <<<"$TEE_OUT")
+    TEE_TAG_CUR=$(read_kv "$BUILD_SH" TEE_TAG_DEFAULT)
+    TEE_ASSET_CUR=$(read_kv "$BUILD_SH" TEE_ASSET_DEFAULT)
+
+    if [[ "$TEE_TAG_CUR" == "$TEE_TAG_NEW" && "$TEE_ASSET_CUR" == "$TEE_ASSET_NEW" ]]; then
+        echo "    TEE            $TEE_TAG_CUR (up to date, $TEE_KIND)"
+    else
+        echo "    TEE            $TEE_TAG_CUR  ->  $TEE_TAG_NEW   ($TEE_ASSET_NEW, $TEE_KIND)"
+        CHANGED=1
+        if [[ $APPLY -eq 1 ]]; then
+            patch_kv "$BUILD_SH" TEE_TAG_DEFAULT   "$TEE_TAG_NEW"
+            patch_kv "$BUILD_SH" TEE_ASSET_DEFAULT "$TEE_ASSET_NEW"
+        fi
+    fi
+else
+    echo "    TEE            lookup failed" >&2
+    FAILED=1
+fi
+
+# ------------------------------------ each release line's own PIF engine ----
+# Compare the TAG only. Repos like KOWX712/PlayIntegrityFix re-cut assets within
+# one tag (…-1-inject-s.zip), and chasing the asset name would open a PR on
+# every re-upload, so a pinned revision stays pinned until the tag itself moves.
+for conf in "$VARIANT_SRC"/*/build.conf; do
+    [[ -f "$conf" ]] || continue
+    line=$(basename "$(dirname "$conf")")
+    repo=$(read_kv "$conf" PIF_REPO)
+    tag_cur=$(read_kv "$conf" PIF_TAG)
+    filter=$(read_kv "$conf" PIF_ASSET_FILTER)
+    [[ -n "$repo" && -n "$tag_cur" ]] || { echo "    $line: build.conf incomplete" >&2; FAILED=1; continue; }
+
+    if ! out=$(api_latest "$repo" "$filter"); then
+        printf '    %-14s lookup failed (%s)\n' "$line" "$repo" >&2
+        FAILED=1
+        continue
+    fi
+    tag_new=$(sed -n 1p <<<"$out")
+    asset_new=$(sed -n 2p <<<"$out")
+    kind=$(sed -n 3p <<<"$out")
+
+    if [[ "$tag_cur" == "$tag_new" ]]; then
+        printf '    %-14s %s (up to date, %s, %s)\n' "$line" "$tag_cur" "$repo" "$kind"
+    else
+        printf '    %-14s %s  ->  %s   (%s, %s)\n' "$line" "$tag_cur" "$tag_new" "$asset_new" "$kind"
+        CHANGED=1
+        if [[ $APPLY -eq 1 ]]; then
+            patch_kv "$conf" PIF_TAG   "$tag_new"
+            patch_kv "$conf" PIF_ASSET "$asset_new"
+        fi
+    fi
+done
+
+[[ $FAILED -eq 1 ]] && exit 1
 
 if [[ $CHANGED -eq 0 ]]; then
     echo '==> Up to date.'
@@ -146,22 +169,9 @@ if [[ $CHANGED -eq 0 ]]; then
 fi
 
 if [[ $APPLY -eq 0 ]]; then
-    echo '==> Updates available. Re-run with --apply to bump build.sh to the new tags.'
+    echo '==> Updates available. Re-run with --apply to bump the pins.'
     exit 10
 fi
-
-echo '==> Patching pinned versions'
-patch_kv() {
-    local file="$1" key="$2" val="${3//$'\r'/}"
-    if grep -qE "^${key}=" "$file"; then
-        sed -i.bak "s|^${key}=.*|${key}=\"${val}\"|" "$file" && rm -f "$file.bak"
-    fi
-}
-
-patch_kv "$BUILD_SH" TEE_TAG_DEFAULT     "$TEE_TAG_NEW"
-patch_kv "$BUILD_SH" TEE_ASSET_DEFAULT   "$TEE_ASSET_NEW"
-patch_kv "$BUILD_SH" PIF_TAG_DEFAULT     "$PIF_TAG_NEW"
-patch_kv "$BUILD_SH" PIF_ASSET_DEFAULT   "$PIF_ASSET_NEW"
 
 echo '==> Patched.'
 

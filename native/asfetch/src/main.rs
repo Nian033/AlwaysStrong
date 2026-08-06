@@ -22,6 +22,8 @@ use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
 
+mod autopif;
+
 struct Url {
     https: bool,
     host: String,
@@ -283,6 +285,10 @@ fn diag(url: &str) {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+
+    if args.len() >= 2 && args[1] == "autopif" {
+        exit(autopif::run(&args[2..]));
+    }
 
     if args.len() >= 3 && args[1] == "--diag" {
         diag(&args[2]);

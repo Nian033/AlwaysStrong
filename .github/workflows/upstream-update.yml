@@ -1,9 +1,9 @@
 name: Upstream update
 
-# Weekly check of TEESimulator-RS / PlayIntegrityFork (main) and
-# TEESimulator-RS / PlayIntegrityFix inject-s (inject) for a newer upstream
-# release. If anything moved, the pinned versions in build.sh are patched and a
-# PR is opened against that branch.
+# Weekly check for a newer TEESimulator-RS (shared) and a newer Play Integrity
+# engine for each release line. If anything moved, the pins are patched — in
+# build.sh for TEE, in module-variants/<line>/build.conf for the engines — the
+# zips are rebuilt to prove the new pins work, and one PR is opened.
 #
 # This used to fail — and email a red run — every morning: the API lookups were
 # unauthenticated, so the shared 60 req/h per-runner-IP pool ran out. They are
@@ -21,14 +21,8 @@ permissions:
 jobs:
   bump:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: [main, inject]
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ matrix.branch }}
 
       - name: Check upstream releases
         id: check
@@ -42,11 +36,11 @@ jobs:
             0)  echo "changed=false" >> "$GITHUB_OUTPUT" ;;
             11) echo "changed=true"  >> "$GITHUB_OUTPUT" ;;
             *)  echo "changed=false" >> "$GITHUB_OUTPUT"
-                echo "::warning title=Upstream check failed::${{ matrix.branch }}: update-upstream.sh exited $code — skipping this run" ;;
+                echo "::warning title=Upstream check failed::update-upstream.sh exited $code — skipping this run" ;;
           esac
           exit 0
 
-      - name: Build with new pins
+      - name: Build both lines with the new pins
         if: steps.check.outputs.changed == 'true'
         run: |
           sudo apt-get update
@@ -54,25 +48,26 @@ jobs:
           # committed native binaries: touch them newer than the sources so the
           # build packages them instead of needing Rust + the NDK on the runner
           find native -path '*/prebuilt/*' -type f -exec touch {} +
-          # only this branch's own line — the sibling branch gets its own job
-          ./build.sh --no-inject
+          ./build.sh
 
       - name: Open PR
         if: steps.check.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          base: ${{ matrix.branch }}
-          branch: chore/upstream-bump-${{ matrix.branch }}
-          commit-message: "chore: bump upstream pins (${{ matrix.branch }})"
-          title: "chore: bump upstream pins (${{ matrix.branch }})"
+          branch: chore/upstream-bump
+          commit-message: "chore: bump upstream pins"
+          title: "chore: bump upstream pins"
           body: |
-            Automated upstream bump for the `${{ matrix.branch }}` line. The
-            pinned versions in `build.sh` now match the newest upstream release,
-            **prereleases included** — TEESimulator-RS ships its freshest builds
-            that way.
+            Automated upstream bump. The pins now match the newest upstream
+            release, **prereleases included** — TEESimulator-RS ships its
+            freshest builds that way.
 
-            The zip built clean on CI with the new pins. Verify locally with:
+            Both zips built clean on CI with the new pins. Verify locally with:
             ```
             ./build.sh --clean
             ```
+
+            Worth an eyeball when a Play Integrity tag moved: some repos publish
+            several assets per tag, and the newest-uploaded one is what gets
+            pinned.
           delete-branch: true

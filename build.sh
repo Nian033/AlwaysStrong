@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
 # AlwaysStrong build script.
-# Downloads upstream TEESimulator-RS + PlayIntegrityFork release ZIPs,
-# overlays our scripts, repackages into a single installable Magisk ZIP.
+# Downloads the upstream TEESimulator-RS + Play Integrity release ZIPs, overlays
+# our scripts, and repackages each release line into an installable Magisk ZIP.
+#
+# Both lines are built from THIS tree — there is no second branch. module/ holds
+# everything they share; module-variants/<line>/ holds the few files that differ:
+#
+#   module-variants/<line>/build.conf            upstream pin + which files to lift
+#   module-variants/<line>/module.prop.override  module.prop keys to rewrite
+#   module-variants/<line>/ship/                 files overlaid into the module
 #
 # Usage:
-#   ./build.sh                  # build with defaults (latest pinned upstream versions)
-#   ./build.sh --tee v6.0.0     # override TEESimulator-RS release tag
-#   ./build.sh --pif v16        # override PlayIntegrityFork release tag
-#   ./build.sh --tee-file PATH  # use a LOCAL TEESimulator-RS zip (e.g. a CI build) — skip download
-#   ./build.sh --pif-file PATH  # use a LOCAL PlayIntegrityFork zip (e.g. a CI build) — skip download
-#   ./build.sh --clean          # wipe build/ first
-#   ./build.sh --no-inject      # only the default Fork zip, skip the -inject one
-#   ./build.sh --inject-ref REF # build the -inject zip from another ref (default: inject)
+#   ./build.sh                        # both lines
+#   ./build.sh --variant fork         # only the default (PlayIntegrityFork) line
+#   ./build.sh --variant inject       # only the PlayIntegrityFix inject-s line
+#   ./build.sh --tee v6.0.0           # override the TEESimulator-RS release tag
+#   ./build.sh --tee-file PATH        # use a LOCAL TEESimulator-RS zip, skip the download
+#   ./build.sh --pif v16              # override the PIF tag  (needs --variant)
+#   ./build.sh --pif-file PATH        # use a LOCAL PIF zip   (needs --variant)
+#   ./build.sh --clean                # wipe build/ first
 #
-# Every run produces BOTH release lines:
-#   out/AlwaysStrong-<ver>.zip         PlayIntegrityFork  (default build, all ABIs)
-#   out/AlwaysStrong-<ver>-inject.zip  PlayIntegrityFix inject-s (ARM only)
-# The inject line lives on the `inject` branch — its module scripts and PIF
-# engine differ — so it is built from a throwaway checkout of that ref.
+# Output:
+#   out/AlwaysStrong-<ver>.zip         PlayIntegrityFork          (default)
+#   out/AlwaysStrong-<ver>-inject.zip  PlayIntegrityFix inject-s
 #
 # CI / nightly builds live as GitHub Actions artifacts, not release assets, so
 # fetch them yourself (e.g. `gh run download -R osm0sis/PlayIntegrityFork -D ci`)
@@ -28,34 +33,32 @@
 set -euo pipefail
 
 # ---------- Configurable upstream versions ----------
-# Bump these when upstream cuts a new release.
-# Find latest via: https://api.github.com/repos/<owner>/<repo>/releases/latest
+# TEESimulator-RS is shared by both lines and pinned here. Each line's Play
+# Integrity engine is pinned in its own module-variants/<line>/build.conf, so a
+# bump to one line cannot silently move the other.
+# Bump with: scripts/update-upstream.sh --apply
 TEE_TAG_DEFAULT="v6.0.1-307"
 TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-307-Release.zip"
-PIF_TAG_DEFAULT="v17"
-PIF_ASSET_DEFAULT="PlayIntegrityFork-v17.zip"
 
 TEE_TAG="$TEE_TAG_DEFAULT"
 TEE_ASSET="$TEE_ASSET_DEFAULT"
-PIF_TAG="$PIF_TAG_DEFAULT"
-PIF_ASSET="$PIF_ASSET_DEFAULT"
 DO_CLEAN=0
 TEE_FILE=""
 PIF_FILE=""
-DO_INJECT=1
-INJECT_REF="${INJECT_REF:-inject}"
+PIF_TAG_OVERRIDE=""
+PIF_ASSET_OVERRIDE=""
+VARIANTS_REQUESTED=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --tee)        TEE_TAG="$2"; shift 2 ;;
         --tee-asset)  TEE_ASSET="$2"; shift 2 ;;
-        --pif)        PIF_TAG="$2"; shift 2 ;;
-        --pif-asset)  PIF_ASSET="$2"; shift 2 ;;
+        --pif)        PIF_TAG_OVERRIDE="$2"; shift 2 ;;
+        --pif-asset)  PIF_ASSET_OVERRIDE="$2"; shift 2 ;;
         --tee-file)   TEE_FILE="$2"; shift 2 ;;
         --pif-file)   PIF_FILE="$2"; shift 2 ;;
         --clean)      DO_CLEAN=1; shift ;;
-        --no-inject)  DO_INJECT=0; shift ;;
-        --inject-ref) INJECT_REF="$2"; shift 2 ;;
+        --variant)    VARIANTS_REQUESTED="$2"; shift 2 ;;
         -h|--help)
             sed -n '2,/^$/p' "$0"
             exit 0
@@ -67,14 +70,14 @@ done
 # A stray CR in a pin turns the download URL into "…/v6.0.1-307<CR>/…", which
 # curl rejects as malformed — and it is invisible in the build log, since the CR
 # just returns the cursor. Strip it rather than debug it again.
-TEE_TAG="${TEE_TAG//$'\r'/}"
-TEE_ASSET="${TEE_ASSET//$'\r'/}"
-PIF_TAG="${PIF_TAG//$'\r'/}"
-PIF_ASSET="${PIF_ASSET//$'\r'/}"
+strip_cr() { printf '%s' "${1//$'\r'/}"; }
+TEE_TAG=$(strip_cr "$TEE_TAG")
+TEE_ASSET=$(strip_cr "$TEE_ASSET")
 
 # ---------- Paths ----------
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 MODULE_SRC="$ROOT/module"
+VARIANT_SRC="$ROOT/module-variants"
 BUILD="$ROOT/build"
 STAGE="$BUILD/stage"
 DL="$BUILD/downloads"
@@ -112,7 +115,30 @@ if [[ $DO_CLEAN -eq 1 ]]; then
     rm -rf "$BUILD"
 fi
 
-mkdir -p "$STAGE" "$DL" "$OUT"
+mkdir -p "$DL" "$OUT"
+
+# ---------- Which release lines to build ----------
+ALL_VARIANTS=()
+for d in "$VARIANT_SRC"/*/; do
+    [[ -f "$d/build.conf" ]] && ALL_VARIANTS+=("$(basename "$d")")
+done
+[[ ${#ALL_VARIANTS[@]} -gt 0 ]] || die "no build lines found under module-variants/"
+
+if [[ -n "$VARIANTS_REQUESTED" ]]; then
+    IFS=',' read -r -a VARIANTS <<< "$VARIANTS_REQUESTED"
+    for v in "${VARIANTS[@]}"; do
+        [[ -f "$VARIANT_SRC/$v/build.conf" ]] \
+            || die "unknown --variant '$v' (have: ${ALL_VARIANTS[*]})"
+    done
+else
+    VARIANTS=("${ALL_VARIANTS[@]}")
+fi
+
+# --pif / --pif-file name ONE engine, so they only make sense for one line.
+if [[ ${#VARIANTS[@]} -gt 1 ]] \
+   && [[ -n "$PIF_FILE$PIF_TAG_OVERRIDE$PIF_ASSET_OVERRIDE" ]]; then
+    die "--pif/--pif-asset/--pif-file apply to a single line — add --variant fork|inject"
+fi
 
 # ---------- zip (or a 7-Zip stand-in) ----------
 # Git-Bash / MSYS boxes ship 7-Zip but no Info-ZIP `zip`, which used to stop the
@@ -147,9 +173,8 @@ EOF
     yellow "    zip not found — packaging with 7-Zip ($SEVENZ)"
 fi
 
-# ---------- Download ----------
+# ---------- Download the shared attestation engine ----------
 tee_zip="$DL/$TEE_ASSET"
-pif_zip="$DL/$PIF_ASSET"
 
 if [[ -n "$TEE_FILE" ]]; then
     [[ -f "$TEE_FILE" ]] || die "--tee-file not found: $TEE_FILE"
@@ -161,18 +186,6 @@ elif [[ ! -f "$tee_zip" ]]; then
         || die "TEESimulator-RS download failed"
 else
     green "    cached: $TEE_ASSET"
-fi
-
-if [[ -n "$PIF_FILE" ]]; then
-    [[ -f "$PIF_FILE" ]] || die "--pif-file not found: $PIF_FILE"
-    pif_zip="$PIF_FILE"
-    green "    local PIF zip: $PIF_FILE"
-elif [[ ! -f "$pif_zip" ]]; then
-    bold "==> Downloading PlayIntegrityFork $PIF_TAG"
-    $FETCH "$pif_zip" "https://github.com/osm0sis/PlayIntegrityFork/releases/download/$PIF_TAG/$PIF_ASSET" \
-        || die "PlayIntegrityFork download failed"
-else
-    green "    cached: $PIF_ASSET"
 fi
 
 # NOTE: the KSU WebUI Standalone APK is intentionally NOT bundled. On Magisk /
@@ -304,6 +317,51 @@ else
     green "    cached: native fetcher (4 ABIs in $ASFETCH_PREBUILT)"
 fi
 
+# ---------- Build one release line ----------
+# Everything below runs once per line in $VARIANTS. The line supplies its
+# upstream pin and its file lists via module-variants/<line>/build.conf; the
+# module scripts it overlays live in module-variants/<line>/ship/.
+BUILT_ZIPS=()
+
+build_variant() {
+  local VARIANT="$1"
+  local VDIR="$VARIANT_SRC/$VARIANT"
+  local STAGE="$BUILD/stage-$VARIANT"
+
+  # per-line settings — reset first so one line can never inherit another's
+  local ZIP_SUFFIX="" PIF_REPO="" PIF_TAG="" PIF_ASSET="" PIF_ASSET_FILTER=""
+  local PIF_FILES="" PIF_REQUIRED="" PIF_PATCH_PATHS="" PATCH_AUTOPIF4_WGET=0
+  # Source through a CR-stripped copy: .gitattributes forces LF on build.conf,
+  # but an editor or a tarball can still hand us CRLF, and a CR riding inside
+  # PIF_TAG turns the download URL into something curl rejects as malformed —
+  # invisible in the log, since a CR just returns the cursor.
+  mkdir -p "$BUILD"
+  tr -d '\r' < "$VDIR/build.conf" > "$BUILD/.build.conf.$VARIANT"
+  # shellcheck source=/dev/null
+  source "$BUILD/.build.conf.$VARIANT"
+  rm -f "$BUILD/.build.conf.$VARIANT"
+  [[ -n "$PIF_TAG_OVERRIDE"   ]] && PIF_TAG="$PIF_TAG_OVERRIDE"
+  [[ -n "$PIF_ASSET_OVERRIDE" ]] && PIF_ASSET="$PIF_ASSET_OVERRIDE"
+  [[ -n "$PIF_REPO" && -n "$PIF_TAG" && -n "$PIF_ASSET" ]] \
+      || die "$VARIANT: build.conf is missing PIF_REPO / PIF_TAG / PIF_ASSET"
+
+  bold ""
+  bold "==> Building the '$VARIANT' line ($PIF_REPO $PIF_TAG)"
+
+  # ---------- Download this line's Play Integrity engine ----------
+  local pif_zip="$DL/$PIF_ASSET"
+  if [[ -n "$PIF_FILE" ]]; then
+      [[ -f "$PIF_FILE" ]] || die "--pif-file not found: $PIF_FILE"
+      pif_zip="$PIF_FILE"
+      green "    local PIF zip: $PIF_FILE"
+  elif [[ ! -f "$pif_zip" ]]; then
+      bold "==> Downloading $PIF_REPO $PIF_TAG"
+      $FETCH "$pif_zip" "https://github.com/$PIF_REPO/releases/download/$PIF_TAG/$PIF_ASSET" \
+          || die "$PIF_REPO download failed"
+  else
+      green "    cached: $PIF_ASSET"
+  fi
+
 # ---------- Stage layout ----------
 bold "==> Staging module files"
 rm -rf "$STAGE"
@@ -311,6 +369,30 @@ mkdir -p "$STAGE"
 
 # 1) Our scripts/configs (the glue). These override anything from upstream.
 cp -a "$MODULE_SRC/." "$STAGE/"
+
+# 1a) Overlay this line's own files (engine.sh, description.txt, ...) on top.
+if [[ -d "$VDIR/ship" ]]; then
+    cp -a "$VDIR/ship/." "$STAGE/"
+    green "    overlaid module-variants/$VARIANT/ship/"
+fi
+
+# 1a2) Apply this line's module.prop overrides. version / versionCode are NOT
+#      overridable — they are defined once, in module/module.prop, so the two
+#      lines can never drift apart on the number users see.
+if [[ -f "$VDIR/module.prop.override" ]]; then
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+        local k="${line%%=*}"
+        case "$k" in
+            version|versionCode|id)
+                die "$VARIANT/module.prop.override may not override '$k'" ;;
+        esac
+        grep -q "^${k}=" "$STAGE/module.prop" \
+            || die "$VARIANT/module.prop.override sets unknown key '$k'"
+        sed -i "s|^${k}=.*|${line//|/\\|}|" "$STAGE/module.prop"
+    done < "$VDIR/module.prop.override"
+    green "    applied module.prop overrides"
+fi
 
 # 1b) Ship banner.png inside the module so the manager shows it locally
 #     (module.prop: banner=/data/adb/modules/tricky_store/banner.png) instead of
@@ -345,10 +427,9 @@ cp "$TEE_EXTRACT/classes.dex" "$STAGE/tee_classes.dex"
 
 [[ -f "$TEE_EXTRACT/keybox.xml" ]] && cp "$TEE_EXTRACT/keybox.xml" "$STAGE/keybox.xml"
 
-# 3) Extract PlayIntegrityFork: zygisk libs, classes.dex (PIF's, stays as classes.dex),
-#    autopif4.sh/killpi.sh/migrate.sh (refresh tooling), example.pif.prop/app_replace_list.txt,
-#    common_setup.sh.
-PIF_EXTRACT="$BUILD/pif_extracted"
+# 3) Extract this line's Play Integrity engine: zygisk libs, classes.dex (PIF's,
+#    stays as classes.dex) and the upstream helper scripts named by $PIF_FILES.
+PIF_EXTRACT="$BUILD/pif_extracted-$VARIANT"
 rm -rf "$PIF_EXTRACT"
 mkdir -p "$PIF_EXTRACT"
 unzip -qq -o "$pif_zip" -d "$PIF_EXTRACT"
@@ -359,10 +440,16 @@ cp "$PIF_EXTRACT/zygisk"/*.so "$STAGE/zygisk/" 2>/dev/null || die "PIF zygisk li
 [[ -f "$PIF_EXTRACT/classes.dex" ]] || die "PIF ZIP missing classes.dex"
 cp "$PIF_EXTRACT/classes.dex" "$STAGE/classes.dex"
 
-for f in autopif4.sh killpi.sh migrate.sh common_setup.sh example.pif.prop app_replace_list.txt; do
+for f in $PIF_FILES; do
     if [[ -f "$PIF_EXTRACT/$f" ]]; then
         cp "$PIF_EXTRACT/$f" "$STAGE/$f"
     fi
+done
+# A silently-missing helper means the fingerprint refresh does nothing at run
+# time, which is invisible until someone's verdict quietly drops. Fail here.
+for f in $PIF_REQUIRED; do
+    [[ -f "$STAGE/$f" ]] \
+        || die "$VARIANT: PIF zip has no $f — upstream layout changed, update module-variants/$VARIANT/build.conf"
 done
 
 # 4) Stage the Rust watcher + fetcher binaries (built/cached above).
@@ -385,7 +472,8 @@ done
 # 5) Rewrite hard-coded /data/adb/modules/playintegrityfix references in PIF scripts
 #    to our module id (tricky_store). Done in-place on copies inside the stage.
 bold "==> Patching PIF script paths -> /data/adb/modules/tricky_store"
-for f in "$STAGE/autopif4.sh" "$STAGE/killpi.sh" "$STAGE/migrate.sh" "$STAGE/common_setup.sh"; do
+for f in $PIF_PATCH_PATHS; do
+    f="$STAGE/$f"
     [[ -f "$f" ]] || continue
     # Linux/macOS sed compat
     if sed --version >/dev/null 2>&1; then
@@ -402,7 +490,7 @@ done
 # (--timeout / --tries) are NOT in toybox wget, and --tries isn't in busybox
 # wget either — injecting them makes every fetch error out with "unknown
 # option" and the fingerprint refresh silently fails.
-if [[ -f "$STAGE/autopif4.sh" ]]; then
+if [[ "$PATCH_AUTOPIF4_WGET" == "1" && -f "$STAGE/autopif4.sh" ]]; then
     bold "==> Patching autopif4.sh: wget -T 10"
     "${SED_I[@]}" 's|wget -q |wget -q -T 10 |g' "$STAGE/autopif4.sh"
 
@@ -477,7 +565,7 @@ for so in "$STAGE/zygisk"/*.so; do
         die "zygisk byte-patch incomplete — upstream changed PIF's hardcoded path. Update SO_PATCH in build.sh before shipping."
     fi
 done
-for f in autopif4.sh killpi.sh migrate.sh common_setup.sh; do
+for f in $PIF_PATCH_PATHS; do
     [[ -f "$STAGE/$f" ]] || continue
     if grep -qF 'modules/playintegrityfix' "$STAGE/$f"; then
         die "$f still references modules/playintegrityfix after sed patch — upstream layout changed; fix the path patch in build.sh."
@@ -508,45 +596,20 @@ done
 # show an "Open Web UI" entry next to the module.
 
 # ---------- Generate ZIP ----------
-VERSION=$(grep '^version=' "$STAGE/module.prop" | cut -d= -f2)
-OUT_ZIP="$OUT/AlwaysStrong-${VERSION}.zip"
-rm -f "$OUT_ZIP"
+  local VERSION OUT_ZIP
+  VERSION=$(grep '^version=' "$STAGE/module.prop" | cut -d= -f2)
+  OUT_ZIP="$OUT/AlwaysStrong-${VERSION}${ZIP_SUFFIX}.zip"
+  rm -f "$OUT_ZIP"
 
-bold "==> Packaging $OUT_ZIP"
-( cd "$STAGE" && zip -qr "$OUT_ZIP" . -x "*.DS_Store" )
+  bold "==> Packaging $OUT_ZIP"
+  ( cd "$STAGE" && zip -qr "$OUT_ZIP" . -x "*.DS_Store" )
+  BUILT_ZIPS+=("$OUT_ZIP")
+}
 
-# ---------- Second release line: the -inject variant ----------
-# The inject-s build is a different PIF engine with its own module scripts, so
-# it lives on the `inject` branch. Export that ref into build/inject-src and run
-# its own build.sh with ZIP_SUFFIX=-inject, so a single ./build.sh emits both
-# zips. No flags are forwarded: --tee/--pif pins belong to one line only, and
-# the export is fresh every run, so --clean has nothing to wipe there.
-INJECT_ZIP=""
-if [[ $DO_INJECT -eq 1 && -z "${AS_VARIANT_BUILD:-}" ]]; then
-    if ! command -v git >/dev/null 2>&1 \
-       || ! git -C "$ROOT" rev-parse --verify -q "${INJECT_REF}^{commit}" >/dev/null 2>&1; then
-        yellow ""
-        yellow "  skipping the -inject build: ref '$INJECT_REF' not found"
-        yellow "  (fetch it with: git fetch origin inject:inject, or pass --no-inject)"
-    else
-        bold ""
-        bold "==> Building the -inject line from '$INJECT_REF'"
-        INJECT_SRC="$BUILD/inject-src"
-        rm -rf "$INJECT_SRC"
-        mkdir -p "$INJECT_SRC"
-        git -C "$ROOT" archive "$INJECT_REF" | tar -x -C "$INJECT_SRC" \
-            || die "could not export '$INJECT_REF'"
-        # share the download cache — the TEE zip is identical on both lines
-        mkdir -p "$INJECT_SRC/build/downloads"
-        cp -n "$DL"/*.zip "$INJECT_SRC/build/downloads/" 2>/dev/null || true
-        AS_VARIANT_BUILD=1 ZIP_SUFFIX="-inject" bash "$INJECT_SRC/build.sh" \
-            || die "the -inject build failed (run it alone: cd $INJECT_SRC && ZIP_SUFFIX=-inject ./build.sh)"
-        INJECT_ZIP=$(ls -1 "$INJECT_SRC"/out/AlwaysStrong-*-inject.zip 2>/dev/null | head -1)
-        [[ -n "$INJECT_ZIP" ]] || die "the -inject build produced no zip"
-        cp "$INJECT_ZIP" "$OUT/"
-        INJECT_ZIP="$OUT/$(basename "$INJECT_ZIP")"
-    fi
-fi
+# ---------- Run every requested line ----------
+for v in "${VARIANTS[@]}"; do
+    build_variant "$v"
+done
 
 # ---------- Summary ----------
 summarize() {
@@ -558,9 +621,7 @@ summarize() {
     fi
 }
 green ""
-summarize "$OUT_ZIP"
-if [[ -n "$INJECT_ZIP" ]]; then
+for z in "${BUILT_ZIPS[@]}"; do
+    summarize "$z"
     green ""
-    summarize "$INJECT_ZIP"
-fi
-green ""
+done

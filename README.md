@@ -94,7 +94,7 @@ Triggered from your root manager, or by running `sh action.sh` in a root shell. 
 
 - rebuilds `target.txt`
 - refreshes the keybox
-- pulls a fresh Pixel fingerprint and security patch (`autopif4`)
+- pulls a fresh Pixel fingerprint and security patch
 - restarts DroidGuard and the Play Store
 
 The verdict updates a few seconds later. No reboot is needed. The same fingerprint, security-patch and keybox refresh also runs on its own in the background every hour (interval configurable from the WebUI), so the module keeps passing with zero manual upkeep.
@@ -104,18 +104,30 @@ The verdict updates a few seconds later. No reboot is needed. The same fingerpri
 The repo ships no upstream binaries. `build.sh` downloads the pinned upstream release ZIPs, overlays the glue scripts in `module/`, and produces the installable ZIPs. On Windows run it from WSL or Git Bash (7-Zip is used automatically when Info-ZIP `zip` is missing).
 
 ```bash
-./build.sh                              # pinned upstream versions
+./build.sh                              # both release lines
+./build.sh --variant fork               # only the default build
+./build.sh --variant inject             # only the -inject build
 ./build.sh --clean                      # wipe build/ and rebuild
-./build.sh --no-inject                  # default build only
-./build.sh --tee v6.0.1-307 --pif v17   # override upstream tags
+./build.sh --tee v6.0.1-307             # override the TEESimulator-RS tag
 ```
 
 Every run produces both lines:
 
-- `out/AlwaysStrong-<version>.zip` — the default build (PlayIntegrityFork, all ABIs)
-- `out/AlwaysStrong-<version>-inject.zip` — the ARM build (PlayIntegrityFix inject-s)
+- `out/AlwaysStrong-<version>.zip` — the default build (PlayIntegrityFork)
+- `out/AlwaysStrong-<version>-inject.zip` — the PlayIntegrityFix inject-s build
 
-The `-inject` line lives on the `inject` branch, so `build.sh` exports that ref into `build/inject-src` and builds it there. You need that branch locally (`git fetch origin inject:inject`); without it the second zip is skipped with a warning.
+Both are built from this one tree — there is no second branch:
+
+```
+module/                                 everything the two lines share
+module-variants/<line>/build.conf       upstream pin + which files to lift
+module-variants/<line>/module.prop.override
+module-variants/<line>/ship/engine.sh   the only engine-specific module script
+```
+
+`engine.sh` is the whole seam. It answers three questions the rest of the module never has to care about: which prop file this engine's zygisk reads, what its STRONG spoof flags are called, and how upstream's own fingerprint fetcher is invoked. Adding a third engine means adding one directory, not a branch.
+
+`version` / `versionCode` live only in `module/module.prop` — a line may not override them, so the two builds can never disagree about which release they are.
 
 To pull upstream and repackage in one go:
 
@@ -123,7 +135,7 @@ To pull upstream and repackage in one go:
 scripts/update-upstream.sh --apply --build
 ```
 
-That bumps the pinned TEESimulator-RS / Play Integrity versions in `build.sh` to the newest upstream release — **prereleases included**, which is where TEESimulator-RS publishes its freshest builds — and rebuilds. Drop `--build` to only bump, add `--stable-only` to ignore prereleases. A weekly GitHub Action runs the same check on both branches and opens a PR.
+That bumps TEESimulator-RS in `build.sh` and each line's Play Integrity engine in its own `build.conf`, to the newest upstream release — **prereleases included**, which is where TEESimulator-RS publishes its freshest builds — and rebuilds both zips. Drop `--build` to only bump, add `--stable-only` to ignore prereleases. A weekly GitHub Action runs the same check and opens one PR.
 
 ## Credits
 

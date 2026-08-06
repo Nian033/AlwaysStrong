@@ -61,13 +61,21 @@ else
 fi
 
 # --- extract our scripts + configs ---------------------------------------
+# engine.sh comes first: it names the upstream files this build's Play Integrity
+# engine needs ($ENGINE_FILES), which differ between the two builds. Everything
+# else in this script is engine-neutral.
+install_file "engine.sh" "$MODPATH"
+# shellcheck source=/dev/null
+. "$MODPATH/engine.sh"
+
 for f in module.prop service.sh post-fs-data.sh action.sh \
-         uninstall.sh common_func.sh common_setup.sh sepolicy.rule \
+         uninstall.sh common_func.sh sepolicy.rule \
          keybox_fetch.sh build_target_txt.sh status_fetch.sh description.txt \
          rom_spoof_block.sh conflict_scan.sh sync_patch.sh \
-         autopif4.sh killpi.sh migrate.sh pif_native_fetch.sh \
+         pif_native_fetch.sh prop_unify.sh logcat_cleanup.sh \
          pif_fallback_1.prop pif_fallback_2.prop \
-         app_replace_list.txt example.pif.prop target.txt daemon ; do
+         target.txt daemon \
+         $ENGINE_FILES ; do
   install_file "$f" "$MODPATH"
 done
 
@@ -96,6 +104,10 @@ else
 fi
 
 # --- PIF zygisk + dex ----------------------------------------------------
+# Ship whatever ABIs upstream built. PlayIntegrityFix inject-s builds ARM only,
+# so on x86 that build has no zygisk to install: the TEE half (hardware
+# attestation) still runs, but the Play Integrity spoof cannot, and we say so
+# rather than half-working in silence. PlayIntegrityFork covers all four ABIs.
 mkdir -p "$MODPATH/zygisk"
 ZN=0
 for z in arm64-v8a armeabi-v7a x86 x86_64; do
@@ -105,7 +117,24 @@ for z in arm64-v8a armeabi-v7a x86 x86_64; do
   fi
 done
 install_file "classes.dex" "$MODPATH"
-if [ $ZN -gt 0 ]; then
+
+HAS_ZYGISK_SO=0
+[ -f "$MODPATH/zygisk/$ABI_DIR.so" ] && HAS_ZYGISK_SO=1
+
+if [ $HAS_ZYGISK_SO -eq 0 ]; then
+  ui_print "⚠️ no PIF zygisk for $ABI_DIR ($ENGINE_NAME is ARM-only)"
+  ui_print "⚠️ TEE works, Play Integrity spoof won't"
+  ui_print "⚠️ use the default build for $ABI_DIR"
+# --- Zygisk provider check — PIF's zygisk needs a Zygisk host --------------
+# The common silent-failure setup is Zygisk-less KernelSU: KSU has NO built-in
+# Zygisk, so without ZygiskNext / ReZygisk the PIF spoof never loads and STRONG
+# quietly fails. Magisk / APatch ship (or host) Zygisk themselves. Warn only on
+# the real footgun to avoid false alarms.
+elif [ "$KSU" = "true" ] \
+     && [ ! -d /data/adb/modules/zygisksu ] && [ ! -d /data/adb/modules/rezygisk ]; then
+  ui_print "⚠️ KernelSU without Zygisk Next / ReZygisk"
+  ui_print "⚠️ install one or PIF spoof won't load (no STRONG)"
+else
   ui_print "zygisk found"
 fi
 

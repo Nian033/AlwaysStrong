@@ -50,23 +50,103 @@ com.google.android.gsf
 
 is_installed() { printf '%s\n' "$ALL" | grep -Fxq "$1"; }
 
-{
-    # User installs (`-3`). This skips system apps including system-updated
-    # GMS/GSF/Vending, which is why the FORCED_LIST below explicitly re-adds
-    # them with the ! flag. Filter the 3 forced names defensively in case a
-    # weird ROM ever surfaces them through `-3` -- we don't want both a
-    # `foo` and a `foo!` line for the same package.
+# The base app pool (user installs + installed OEM wallet/store apps + the forced
+# Google trio) as PLAIN package names. The `!` suffix — TrickyStore's generate /
+# "cert-generating" mode — is applied per app below, from the forced defaults and
+# the WebUI overrides, so it lives in exactly one place.
+build_default() {
     pm list packages -3 2>/dev/null \
         | sed 's/^package://' \
         | grep -Fxv -e com.android.vending \
                     -e com.google.android.gms \
                     -e com.google.android.gsf
+    for p in $OEM_LIST;    do is_installed "$p" && echo "$p"; done
+    for p in $FORCED_LIST; do is_installed "$p" && echo "$p"; done
+}
 
-    for p in $OEM_LIST; do
-        is_installed "$p" && echo "$p"
-    done
+DEF=$(build_default | sort -u)
 
-    for p in $FORCED_LIST; do
-        is_installed "$p" && echo "${p}!"
-    done
-} | sort -u > "${TGT}.tmp" && mv -f "${TGT}.tmp" "$TGT"
+# Per-app overrides managed by the WebUI — the single source of truth, re-read on
+# every rebuild so a choice survives regeneration (aswatcher only re-runs THIS
+# script, it never appends packages itself). Each line: "pkg<TAB>spec":
+#   spec = "off"          -> unticked: dropped from target.txt, never re-added.
+#   spec = "<kb>|<mode>"     kb   = "-" (default keybox.xml) or a filename in the
+#                                   config dir -> app goes into that "[file.xml]"
+#                                   section so TrickyStore reads that keybox.
+#                            mode = "auto" (no suffix, let TrickyStore decide),
+#                                   "gen" (generate the whole chain -> "!"), or
+#                                   "hack" (hack leaf cert -> "?").
+#   (no line)             -> ticked, default keybox, auto; forced trio -> gen.
+MAP="$(dirname "$TGT")/app_keybox.map"
+[ -f "$MAP" ] || MAP=""
+FORCED="com.android.vending com.google.android.gms com.google.android.gsf"
+
+{
+    # --- default-keybox section (kb == "-"): plain list + per-app ! suffix ---
+    printf '%s\n' "$DEF" | sed '/^$/d' | awk -v mapf="$MAP" -v forced="$FORCED" '
+        function sfx(p, spec,   n,b,mode){
+            mode="";
+            if(spec!="" && spec!="off"){ n=split(spec,b,"|"); if(n>=2) mode=b[2] }
+            if(mode=="") mode=(p in F)?"gen":"auto";
+            return (mode=="gen")?"!":(mode=="hack")?"?":"";
+        }
+        function kbof(spec,   n,b){
+            if(spec==""||spec=="off") return "-";
+            n=split(spec,b,"|"); return (b[1]==""?"-":b[1]);
+        }
+        BEGIN{
+            split(forced,a," "); for(i in a) F[a[i]]=1;
+            if(mapf!=""){ while((getline ln<mapf)>0){ t=index(ln,"\t"); if(t==0) continue;
+                M[substr(ln,1,t-1)]=substr(ln,t+1) } }
+        }
+        { p=$0; spec=(p in M)?M[p]:"";
+          if(spec=="off") next;             # unticked
+          if(kbof(spec)!="-") next;         # assigned to a keybox file -> a section
+          print p sfx(p,spec); }
+    '
+    # --- one "[file.xml]" section per assigned keybox (sorted -> stable output) ---
+    if [ -n "$MAP" ]; then
+        awk -F'\t' -v forced="$FORCED" '
+            BEGIN{ split(forced,a," "); for(i in a) F[a[i]]=1 }
+            $1!="" {
+                spec=$2; if(spec=="off") next;
+                n=split(spec,b,"|"); kb=(b[1]==""?"-":b[1]); if(kb=="-") next;
+                mode=(n>=2?b[2]:""); if(mode=="") mode=($1 in F)?"gen":"auto";
+                print kb "\t" $1 ((mode=="gen")?"!":(mode=="hack")?"?":"");
+            }' "$MAP" | sort | awk -F'\t' '
+            $1!=prev{ printf "\n[%s]\n", $1; prev=$1 } { print $2 }'
+    fi
+} > "${TGT}.tmp" && mv -f "${TGT}.tmp" "$TGT"
+
+# --- GC orphaned WebUI-imported keyboxes ---------------------------------
+# The WebUI records every keybox it imports into the config dir in
+# .imported_keyboxes (one filename per line). A file listed there that no map
+# entry references anymore is a dead import — delete it so the config dir does
+# not accumulate stale keyboxes. ONLY files we imported are ever touched:
+# manually-dropped keyboxes are never in the manifest, so they are left alone.
+# keybox.xml (the default) is never a managed import and is skipped defensively.
+# If the map is gone entirely, every import is orphaned -> all get cleaned.
+CFG_DIR="$(dirname "$TGT")"
+MANIFEST="$CFG_DIR/.imported_keyboxes"
+if [ -f "$MANIFEST" ]; then
+    # Keyboxes still referenced by a non-off map entry (kb field != "-").
+    REFERENCED=""
+    if [ -n "$MAP" ]; then
+        REFERENCED=$(awk -F'\t' '
+            $1!="" { spec=$2; if(spec=="off") next;
+                     n=split(spec,b,"|"); kb=(b[1]==""?"-":b[1]);
+                     if(kb!="-") print kb }' "$MAP" | sort -u)
+    fi
+    NEWMAN=""
+    while IFS= read -r fn; do
+        [ -n "$fn" ] || continue
+        [ "$fn" = "keybox.xml" ] && continue
+        if printf '%s\n' "$REFERENCED" | grep -Fxq "$fn"; then
+            NEWMAN="${NEWMAN}${fn}
+"                                       # still used -> keep file + manifest line
+        else
+            rm -f "$CFG_DIR/$fn" 2>/dev/null    # orphan -> delete the keybox file
+        fi
+    done < "$MANIFEST"
+    printf '%s' "$NEWMAN" > "$MANIFEST.tmp" && mv -f "$MANIFEST.tmp" "$MANIFEST"
+fi

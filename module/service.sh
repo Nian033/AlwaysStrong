@@ -8,6 +8,21 @@ unset ASH_STANDALONE
 
 [ -f "$MODDIR/common_func.sh" ] && . "$MODDIR/common_func.sh"
 
+# --- Play Integrity engine adapter ---
+# Which prop file the zygisk reads, and under which spoof-flag names, is the one
+# thing that differs between the two builds. engine.sh (overlaid by build.sh)
+# owns it; everything below is identical in both.
+CONFIG_DIR=/data/adb/tricky_store
+if [ -f "$MODDIR/engine.sh" ]; then
+    . "$MODDIR/engine.sh"
+else
+    log -t "AlwaysStrong" "engine.sh missing — no fingerprint handling this boot"
+    engine_autopif()       { return 1; }
+    engine_install_pif()   { return 1; }
+    engine_enforce_spoof() { return 0; }
+    ENGINE=none
+fi
+
 # --- Recovery mode guard ---
 resetprop_if_match ro.boot.mode recovery unknown
 resetprop_if_match ro.bootmode recovery unknown
@@ -112,6 +127,25 @@ if [ -x "$AS_BIN" ]; then
     } &
 fi
 
+# --- Anti-detection hardening (each opt-out via a no_* flag) --------------
+# Runs after the TEE/aswatcher daemons are up. All three degrade quietly if
+# their prerequisites are missing (no pif yet, SELinux blocks /proc writes).
+{
+    CFG=/data/adb/tricky_store
+    sleep 8   # let supervisor/daemon/aswatcher come up first
+
+    # NOTE: prop_unify.sh (global resetprop of ro.product.*) ships but is
+    # deliberately never invoked, on either engine. Both spoof Build/ro.product.*
+    # where Play Integrity looks, so a global resetprop buys no integrity — and it
+    # leaks the spoofed model to every process, so the device shows up as e.g.
+    # "Pixel 10" in scrcpy/ADB. It stays in the tree for manual use only.
+
+    # Suppress our log tags + scrub ANR/tombstone traces (self-daemonizes).
+    if [ ! -f "$CFG/no_logcat_cleanup" ] && [ -f "$MODDIR/logcat_cleanup.sh" ]; then
+        MODPATH="$MODDIR" sh "$MODDIR/logcat_cleanup.sh" >/dev/null 2>&1 &
+    fi
+} &
+
 # --- VBMeta digest (deferred, bounded) ---
 # Reading the whole vbmeta partition during early boot can hang the boot
 # animation on some Xiaomi devices. Skip if already set, only read 64KiB.
@@ -182,36 +216,26 @@ if [ ! -f "$MODDIR/.bootstrapped" ]; then
         sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
-    # 2. fingerprint + security patch. native crawl (primary) fetches AND runs
-    #    migrate.sh -> custom.pif.prop (the file PIF reads), fast; autopif4 (whose
-    #    crawl hangs on some devices) is the fallback. Both produce custom.pif.prop.
+    # 2. fingerprint + security patch. Our native crawl is primary (fast, and it
+    #    installs through the engine adapter); upstream's own fetcher, whose crawl
+    #    hangs on some devices, is the fallback. Both end with the fingerprint in
+    #    the file this build's zygisk actually reads.
     FP_DONE=0
     if [ -x "$MODDIR/pif_native_fetch.sh" ]; then
         sh "$MODDIR/pif_native_fetch.sh" >/data/adb/tricky_store/autopif.log 2>&1 && FP_DONE=1
         cat /data/adb/tricky_store/autopif.log 2>/dev/null | log -t "AlwaysStrong-boot"
     fi
-    if [ "$FP_DONE" = 0 ] && [ -f "$MODDIR/autopif4.sh" ]; then
-        sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-boot"
+    if [ "$FP_DONE" = 0 ]; then
+        engine_autopif 2>&1 | log -t "AlwaysStrong-boot"
     fi
 
     # 2b. sync the attestation/system security patch to the fresh fingerprint
     [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-boot"
 
-    # 3. enforce STRONG-friendly settings on every produced pif.prop variant
-    for CPIF in "$MODDIR/custom.pif.prop" "$MODDIR/pif.prop" \
-                /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
-        [ -f "$CPIF" ] || continue
-        for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
-                  "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
-            k="${kv%=*}"; v="${kv#*=}"
-            if grep -qE "^${k}=" "$CPIF"; then
-                sed -i "s|^${k}=.*|${k}=${v}|" "$CPIF"
-            else
-                echo "${k}=${v}" >> "$CPIF"
-            fi
-        done
-        log -t "AlwaysStrong-boot" "STRONG enforced on $CPIF"
-    done
+    # 3. enforce STRONG-friendly settings on every prop file the engine reads
+    engine_enforce_spoof
+    log -t "AlwaysStrong-boot" "STRONG enforced ($ENGINE)"
+
 
     # 4. restart PI consumers so they pick up the new state
     killall -9 com.google.android.gms.unstable 2>/dev/null
@@ -232,7 +256,7 @@ fi
 
 # --- Hourly refresh (fingerprint + keybox, each toggle-able from WebUI) --
 # WebUI writes flag files into /data/adb/tricky_store/ to opt OUT:
-#   no_auto_fp      -> skip the autopif4 refresh
+#   no_auto_fp      -> skip the fingerprint refresh
 #   no_auto_keybox  -> skip the keybox fetch
 # Keybox-only restarts PI when it actually changed (exit 0); fingerprint
 # updates are picked up naturally on the next PI invocation, so we don't
@@ -255,27 +279,15 @@ fi
                 sh "$MODDIR/pif_native_fetch.sh" >"$CFG/autopif.log" 2>&1 && FP_DONE=1
                 cat "$CFG/autopif.log" 2>/dev/null | log -t "AlwaysStrong-hourly"
             fi
-            if [ "$FP_DONE" = 0 ] && [ -f "$MODDIR/autopif4.sh" ]; then
-                sh "$MODDIR/autopif4.sh" -s -m 2>&1 | log -t "AlwaysStrong-hourly"
+            if [ "$FP_DONE" = 0 ]; then
+                engine_autopif 2>&1 | log -t "AlwaysStrong-hourly"
             fi
             [ -f "$MODDIR/sync_patch.sh" ] && sh "$MODDIR/sync_patch.sh" 2>&1 | log -t "AlwaysStrong-hourly"
-            # enforce STRONG spoof settings — migrate.sh (run by native fetch /
-            # autopif4) resets them to spoofProvider=1 / spoofVendingFinger=0,
-            # which breaks STRONG. Without this the hourly refresh silently
-            # reverts the fingerprint to a WEAK config an hour after boot.
-            for CPIF in "$MODDIR/custom.pif.prop" "$MODDIR/pif.prop" \
-                        /data/adb/tricky_store/custom.pif.prop /data/adb/tricky_store/pif.prop; do
-                [ -f "$CPIF" ] || continue
-                for kv in "spoofProvider=0" "spoofVendingFinger=1" "spoofBuild=1" \
-                          "spoofProps=1" "spoofSignature=0" "spoofVendingSdk=0"; do
-                    k="${kv%=*}"; v="${kv#*=}"
-                    if grep -qE "^${k}=" "$CPIF"; then
-                        sed -i "s|^${k}=.*|${k}=${v}|" "$CPIF"
-                    else
-                        echo "${k}=${v}" >> "$CPIF"
-                    fi
-                done
-            done
+            # enforce STRONG spoof settings — upstream's own fetcher resets them
+            # to a WEAK config (Fork's migrate.sh writes spoofProvider=1 /
+            # spoofVendingFinger=0). Without this the hourly refresh silently
+            # reverts the fingerprint to WEAK an hour after boot.
+            engine_enforce_spoof
         fi
         if [ ! -f "$CFG/custom_keybox" ] && [ ! -f "$CFG/no_auto_keybox" ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
             kbout=$(sh "$MODDIR/keybox_fetch.sh" 2>&1)

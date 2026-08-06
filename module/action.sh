@@ -22,6 +22,8 @@ row() { echo "    $1   $2"; }
 case "$(uname -m)" in
     aarch64)        ABI=arm64-v8a ;;
     armv7*|armv8l)  ABI=armeabi-v7a ;;
+    x86_64)         ABI=x86_64 ;;
+    i?86)           ABI=x86 ;;
     *)              ABI="" ;;
 esac
 ASFETCH=""
@@ -31,6 +33,20 @@ for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/bu
           /data/adb/modules/busybox-ndk/system/*/busybox; do
     [ -x "$bb" ] && BB="$bb" && break
 done
+# toybox sed (AOSP default) can lack -i on older devices; prefer busybox sed,
+# which always supports in-place edits, when we have it.
+SED_I="sed -i"
+[ -n "$BB" ] && SED_I="$BB sed -i"
+
+# --- Play Integrity engine adapter ---
+# Which prop file the zygisk reads, and under which spoof-flag names, is the one
+# thing that differs between the two builds. engine.sh (overlaid by build.sh)
+# owns it; everything below is identical in both.
+if [ -f "$MODPATH/engine.sh" ]; then
+    . "$MODPATH/engine.sh"
+else
+    echo "  engine.sh missing — broken install, reflash the module"; exit 1
+fi
 
 # asfetch first (connects IPv4-first, works on IPv6-only-DNS networks); fall
 # through to busybox wget / curl if it ever fails on a host.
@@ -93,33 +109,27 @@ fi
 sleep 1
 
 # --- Step 3: Fingerprint ---
-# PIF's zygisk reads custom.pif.prop from the module dir. autopif4 fetches a
-# fresh Pixel fingerprint AND runs migrate.sh to produce that file, so it's the
-# primary. If it stalls/fails we fall back to our native crawl (which now also
-# migrates -> custom.pif.prop), then to shipped static props (also migrated).
-# Every path ends with a valid custom.pif.prop; Step 4 enforces the STRONG spoof
-# settings. A failed primary is shown once as "trying with fallback".
+# Three sources, tried in order: our native crawl, then upstream's own fetcher,
+# then the two shipped static props. Each hands its result to the engine
+# adapter, so whichever lands ends up in the file this build's zygisk reads,
+# with that engine's STRONG flags applied. A failed primary is shown once as
+# "trying with fallback".
 FP_OK=0
 FP_SRC=""
 
-# apply_pif SRC.prop — migrate a minimal pif.prop into the custom.pif.prop PIF
-# reads (module dir), using the same tool autopif4 does.
-apply_pif() {
-    [ -f "$MODPATH/migrate.sh" ] || return 1
-    cp -f "$1" "$MODPATH/pif.prop" 2>/dev/null
-    rm -f "$MODPATH/custom.pif.prop" "$MODPATH/custom.pif.json" 2>/dev/null
-    sh "$MODPATH/migrate.sh" -i -a "$MODPATH/pif.prop" >/dev/null 2>&1
-    [ -s "$MODPATH/custom.pif.prop" ]
-}
+# apply_pif SRC.prop — hand a fingerprint prop to the engine adapter, which
+# knows where its own zygisk reads from and which spoof-flag names it wants.
+apply_pif() { engine_install_pif "$1"; }
 
-# 1. native crawl (PRIMARY) — fetches the same Google servers as autopif4 but
-#    fast (~10s), and self-migrates -> custom.pif.prop. autopif4's own crawl
-#    hangs ~45-90s on some devices (its factory-image HEAD stalls), so it's the
-#    fallback now. Gate on the EXIT CODE (0 only when a fresh custom.pif.prop
-#    was actually produced) — a stale one must not count as success.
+# 1. native crawl (PRIMARY) — fetches the same Google servers upstream does, but
+#    through asfetch. The multi-page crawl runs ~20-25s on a cold/slow network,
+#    so it's bounded at 60s (was 25s, which the crawl kept grazing -> SIGTERM ->
+#    forced fallback on every tap). Gate on the EXIT CODE: it is 0 only when the
+#    engine actually accepted a fresh fingerprint — a stale file must not count.
 if [ -x "$MODPATH/pif_native_fetch.sh" ]; then
     if command -v timeout >/dev/null 2>&1; then
-        timeout 25 sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+        timeout "$ENGINE_NATIVE_TIMEOUT" sh "$MODPATH/pif_native_fetch.sh" \
+            >"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
     else
         sh "$MODPATH/pif_native_fetch.sh" >"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
     fi
@@ -130,18 +140,18 @@ if [ "$FP_OK" = 0 ]; then
     row "🔄" "trying with fallback"
     sleep 1
 
-    # 2. autopif4 (FALLBACK) — upstream-maintained parser; self-migrates too.
-    #    Bounded so its stalling crawl can't freeze the Action.
-    if [ -f "$MODPATH/autopif4.sh" ]; then
-        if command -v timeout >/dev/null 2>&1; then
-            timeout 40 sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
-        else
-            sh "$MODPATH/autopif4.sh" -s -m >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
-        fi
-        [ "$FP_OK" = 1 ] && FP_SRC="pif"
+    # 2. upstream's own fetcher (FALLBACK), whichever engine is installed.
+    #    Bounded so its crawl can't freeze the Action.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$ENGINE_AUTOPIF_TIMEOUT" sh -c '. "$1/engine.sh"; engine_autopif' \
+            _ "$MODPATH" >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+    else
+        engine_autopif >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
     fi
+    [ "$FP_OK" = 1 ] && FP_SRC="pif"
 
-    # 3. shipped static props (alternate 2 each tap) — migrated so PIF reads them.
+    # 3. shipped static props (alternate 2 each tap) — installed through the
+    #    engine adapter like the fetched ones, so they land in the right file.
     if [ "$FP_OK" = 0 ]; then
         IDX_FILE="$CONFIG_DIR/.fp_idx"
         IDX=$(cat "$IDX_FILE" 2>/dev/null)
@@ -164,19 +174,10 @@ esac
 sleep 1
 
 # --- Step 4: Spoof settings + security patch ---
-for f in "$MODPATH/custom.pif.prop" "$MODPATH/pif.prop" \
-         "$CONFIG_DIR/custom.pif.prop" "$CONFIG_DIR/pif.prop"; do
-    [ -f "$f" ] || continue
-    for kv in spoofProvider=0 spoofVendingFinger=1 spoofBuild=1 \
-              spoofProps=1 spoofSignature=0 spoofVendingSdk=0; do
-        k="${kv%=*}"; v="${kv#*=}"
-        if grep -qE "^${k}=" "$f"; then
-            sed -i "s|^${k}=.*|${k}=${v}|" "$f"
-        else
-            echo "${k}=${v}" >> "$f"
-        fi
-    done
-done
+# Re-enforce even when the fetch above already did: a user (or an upstream
+# script) can have edited the prop between taps, and this is the cheap guarantee
+# that what the zygisk reads is a STRONG config.
+engine_enforce_spoof
 
 PATCH=""
 [ -f "$MODPATH/sync_patch.sh" ] && PATCH=$(sh "$MODPATH/sync_patch.sh" boot 2>/dev/null)

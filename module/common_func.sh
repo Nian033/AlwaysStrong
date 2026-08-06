@@ -88,3 +88,36 @@ resetprop_if_match() {
 if [ "$(getprop sys.boot_completed)" != "1" ]; then
     ui_print() { return; }
 fi
+
+# --- Download helpers (needed by inject-s autopif.sh) --------------------
+# Merged from PlayIntegrityFix v4.7-inject-s common_func.sh. inject-s's
+# autopif.sh sources OUR common_func.sh (path-patched), so these must exist.
+sleep_pause() {
+    # APatch and KernelSU need this, but not KSU_NEXT / MMRL
+    if [ -z "$MMRL" ] && [ -z "$KSU_NEXT" ] && { [ "$KSU" = "true" ] || [ "$APATCH" = "true" ]; }; then
+        sleep 5
+    fi
+}
+
+download_fail() {
+    dl_domain=$(echo "$1" | awk -F[/:] '{print $4}')
+    rm -rf "$TEMPDIR"
+    ping -c 1 -W 5 "$dl_domain" > /dev/null 2>&1 || {
+        echo "[!] Unable to connect to $dl_domain, check your internet connection and try again"
+        sleep_pause
+        exit 1
+    }
+    conflict_module=$(ls /data/adb/modules | grep busybox)
+    for i in $conflict_module; do
+        echo "[!] Please remove $i and try again."
+    done
+    echo "[!] download failed!"
+    echo "[x] bailing out!"
+    sleep_pause
+    exit 1
+}
+
+download() { busybox wget -T 10 --no-check-certificate -qO - "$1" > "$2" || download_fail "$1"; }
+if command -v curl > /dev/null 2>&1; then
+    download() { curl --connect-timeout 10 -s "$1" > "$2" || download_fail "$1"; }
+fi

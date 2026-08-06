@@ -277,6 +277,63 @@ h1{
     transition-duration:.001ms!important;
   }
 }
+
+/* ---------------- per-app keybox ---------------- */
+.apps-search{flex:1;min-width:0;background:color-mix(in srgb,var(--muted) 12%,transparent);border:0;border-radius:10px;color:var(--fg);font-size:14px;padding:9px 12px;outline:0;transition:background .15s,box-shadow .15s}
+.apps-search::placeholder{color:var(--muted)}
+.apps-search:focus-visible{background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 45%,transparent)}
+.fm-item{transition:background .16s}
+.fm-item.pick{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+/* "Target apps" navigation row in the main card */
+.row.nav{cursor:pointer}
+.row.nav:active{background:color-mix(in srgb,var(--muted) 8%,transparent)}
+/* app rows: icon + label + package + tick */
+.applist .fm-item{gap:12px}
+.app-icon{width:38px;height:38px;flex-shrink:0;border-radius:9px;object-fit:cover;background:color-mix(in srgb,var(--muted) 14%,transparent)}
+.app-icon.lg{width:46px;height:46px;border-radius:12px}
+.app-nm{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app-pkg{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.app-badge{flex-shrink:0;font-size:10px;font-weight:600;padding:3px 7px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);white-space:nowrap;max-width:34%;overflow:hidden;text-overflow:ellipsis}
+/* tick, tinted by mode: auto=accent, generate=amber, hack=blue */
+.app-chk{flex-shrink:0;width:22px;height:22px;border-radius:7px;border:2px solid var(--slider);display:flex;align-items:center;justify-content:center;color:transparent;transition:background .16s,border-color .16s,color .16s}
+.app-chk.on{background:#6750A4;border-color:#6750A4;color:#fff}
+.app-chk.on.gen{background:#36DB2B;border-color:#36DB2B;color:#fff}
+.app-chk.on.hack{background:#FF8400;border-color:#FF8400;color:#fff}
+@media (prefers-color-scheme:dark){.app-chk.on:not(.gen):not(.hack){background:#D0BCFF;border-color:#D0BCFF;color:#381E72}}
+:root[data-theme="dark"] .app-chk.on:not(.gen):not(.hack){background:#D0BCFF;border-color:#D0BCFF;color:#381E72}
+:root[data-theme="light"] .app-chk.on:not(.gen):not(.hack){background:#6750A4;border-color:#6750A4;color:#fff}
+.app-chk svg{width:14px;height:14px;display:block}
+/* long-press config dialog — compact iOS action-sheet feel */
+#cfg .fm-box{max-width:360px}
+.cfg-head{display:flex;align-items:center;gap:13px;padding:18px 18px 10px}
+.cfg-htext{min-width:0}
+.cfg-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfg-pkg{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kbp-box{height:auto;max-height:82vh;display:flex;flex-direction:column}
+.kbp-scroll{overflow-y:auto;padding:0 2px 2px}
+.kbp-sec{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:12px 18px 6px}
+/* iOS-style grouped rounded list — mode options + the keybox row */
+.kbp-group{margin:0 12px 6px;background:color-mix(in srgb,var(--muted) 8%,transparent);border-radius:13px;overflow:hidden}
+.kbp-opt,.cfg-kbrow{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:0;background:transparent;color:var(--fg);text-align:start;cursor:pointer;transition:background .14s}
+.kbp-opt+.kbp-opt{border-top:1px solid var(--line)}
+.kbp-opt:active,.cfg-kbrow:active{background:color-mix(in srgb,var(--muted) 13%,transparent)}
+.kbp-opt .t{font-size:14px;font-weight:500;line-height:1.2}
+.kbp-opt .s{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.2}
+.kbp-opt .chk{margin-inline-start:auto;width:20px;height:20px;color:var(--accent);flex-shrink:0;opacity:0;transform:scale(.7);transition:opacity .15s,transform .15s}
+.kbp-opt.on .chk{opacity:1;transform:none}
+.kbp-opt.on .t{color:var(--accent);font-weight:600}
+.cfg-kbrow .fm-nm{font-size:14px}
+.cfg-kbrow .chev{width:18px;height:18px;color:var(--muted);flex-shrink:0;margin-inline-start:auto}
+/* footer: ghost Cancel + primary Apply */
+.fm-foot{gap:6px}
+#cfgApply,#kbpOk,#appsOk{background:var(--accent);color:#fff;border-radius:10px;padding:9px 22px;font-weight:600;transition:transform .12s,filter .15s}
+#cfgApply:hover,#kbpOk:hover,#appsOk:hover{filter:brightness(1.06)}
+#cfgApply:active,#kbpOk:active,#appsOk:active{transform:scale(.96)}
+/* file manager sits ABOVE the app/config/keybox overlays (e.g. import from the
+   keybox picker) so it isn't hidden behind them */
+#fm{z-index:60}
+.fm-cancel.ghosttext{color:var(--muted)}
+.kbp-opt:focus-visible,.fm-cancel:focus-visible,.cfg-kbrow:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:-2px}
 </style>
 </head>
 <body>
@@ -300,7 +357,7 @@ h1{
   </span>
 </div>
 
-<div class="lbl" data-i="auto">Auto-update</div>
+<div class="lbl" data-i="auto">Configuration</div>
 <div class="card">
 
   <div class="row">
@@ -309,7 +366,7 @@ h1{
     </div>
     <div class="row-lbl">
       <div class="row-t" data-i="fp_t">Fingerprint</div>
-      <div class="row-s" data-i="fp_s">Hourly Pixel Canary refresh</div>
+      <div class="row-s" data-i="fp_s">Automatic Pixel Canary refresh</div>
     </div>
     <label class="sw"><input type="checkbox" id="fp"><span class="sl"></span></label>
   </div>
@@ -320,7 +377,7 @@ h1{
     </div>
     <div class="row-lbl">
       <div class="row-t" data-i="kb_t">Keybox</div>
-      <div class="row-s" data-i="kb_s">Hourly check, only writes if newer</div>
+      <div class="row-s" data-i="kb_s">Auto check, writes only if newer</div>
     </div>
     <label class="sw"><input type="checkbox" id="kb"><span class="sl"></span></label>
   </div>
@@ -345,6 +402,19 @@ h1{
       <div class="row-s" data-i="rs_s">Disable PixelProps / pihooks engines</div>
     </div>
     <label class="sw"><input type="checkbox" id="rs"><span class="sl"></span></label>
+  </div>
+
+  <div class="row nav" id="pakRow">
+    <div class="row-ic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>
+    </div>
+    <div class="row-lbl">
+      <div class="row-t" data-i="pak_t">Target apps</div>
+      <div class="row-s" id="pakSub" data-i="pak_s">Choose apps, mode &amp; keybox</div>
+    </div>
+    <button class="icon-btn" id="pakOpen" type="button" aria-label="Open" tabindex="-1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
   </div>
 
   <div class="row">
@@ -424,10 +494,73 @@ h1{
   </div>
 </div>
 
+<div class="fm" id="apps" hidden role="dialog" aria-modal="true" aria-label="Per-app keybox">
+  <div class="fm-box">
+    <div class="fm-bar">
+      <button class="icon-btn" id="appsBack" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <input id="appsSearch" class="apps-search" type="text" placeholder="Search apps">
+    </div>
+    <div class="fm-list applist" id="appsList"></div>
+    <div class="fm-foot">
+      <button class="fm-cancel" id="appsOk" type="button" data-i="pak_ok">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- long-press: per-app mode + keybox entry -->
+<div class="fm" id="cfg" hidden role="dialog" aria-modal="true" aria-labelledby="cfgName">
+  <div class="fm-box kbp-box">
+    <div class="cfg-head">
+      <img class="app-icon lg" id="cfgIcon" alt="" draggable="false">
+      <div class="cfg-htext">
+        <div class="cfg-name" id="cfgName">App</div>
+        <div class="cfg-pkg" id="cfgPkg"></div>
+      </div>
+    </div>
+    <div class="kbp-scroll">
+      <div class="kbp-sec" data-i="pak_mode">Mode</div>
+      <div class="kbp-group" role="group" aria-label="Mode">
+        <button class="kbp-opt" id="cfgAuto" type="button" data-m="auto" aria-pressed="true"><div><div class="t" data-i="pak_auto">Auto</div><div class="s" data-i="pak_auto_s">Let AlwaysStrong decide</div></div><svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></button>
+        <button class="kbp-opt" id="cfgGen" type="button" data-m="gen" aria-pressed="false"><div><div class="t" data-i="pak_gen">Generate</div><div class="s" data-i="pak_gen_s">Generate the full cert chain (!)</div></div><svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></button>
+        <button class="kbp-opt" id="cfgHack" type="button" data-m="hack" aria-pressed="false"><div><div class="t" data-i="pak_hack">Hack</div><div class="s" data-i="pak_hack_s">Hack the leaf cert (?)</div></div><svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg></button>
+      </div>
+      <div class="kbp-sec" data-i="pak_keybox">Keybox</div>
+      <div class="kbp-group">
+        <button class="cfg-kbrow" id="cfgKbRow" type="button">
+          <div class="fm-info"><div class="fm-nm" id="cfgKbName">Default keybox</div></div>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="fm-foot">
+      <button class="fm-cancel ghosttext" id="cfgClose" type="button" data-i="fm_cancel">Cancel</button>
+      <button class="fm-cancel" id="cfgApply" type="button" data-i="pak_apply">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- keybox-only picker (opened from the config row; no mode here) -->
+<div class="fm" id="kbp" hidden role="dialog" aria-modal="true" aria-labelledby="kbpTitle">
+  <div class="fm-box kbp-box">
+    <div class="fm-bar">
+      <button class="icon-btn" id="kbpBack" type="button" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+      </button>
+      <div class="fm-crumb" id="kbpTitle" data-i="pak_keybox">Keybox</div>
+    </div>
+    <div class="fm-list" id="kbpList"></div>
+    <div class="fm-foot">
+      <button class="fm-cancel" id="kbpOk" type="button" data-i="pak_ok">OK</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const I={
-  en:{auto:"Auto-update",fp_t:"Fingerprint",fp_s:"Hourly Pixel Canary refresh",kb_t:"Keybox",kb_s:"Hourly check, only writes if newer",status:"Keybox status",ind_t:"Status indicator",ind_s:"Show status prefix in description",rs_t:"Block ROM spoof",rs_s:"Disable PixelProps / pihooks engines",int_t:"Check every",donate:"Donate",ckbx:"Custom keybox",ck_t:"Custom keybox",ck_s:"Use your own keybox — auto-fetch off",ck_pick:"Select keybox file",ck_none:"No file selected",ck_have:"keybox.xml",ck_bad:"Not a valid keybox",ck_sel:"Selected keybox:",fm_new:"Newest",fm_old:"Oldest",fm_empty:"Empty folder",fm_cancel:"Cancel"},
-  tr:{auto:"Otomatik güncelleme",fp_t:"Fingerprint",fp_s:"Her saat Pixel Canary'den çekilir",kb_t:"Keybox",kb_s:"Her saat kontrol, sadece yeniyse yazar",status:"Keybox durumu",ind_t:"Durum göstergesi",ind_s:"Açıklamada durum öneki göster",rs_t:"ROM spoofunu engelle",rs_s:"PixelProps / pihooks motorlarını kapat",int_t:"Kontrol aralığı",donate:"Bağış",ckbx:"Özel keybox",ck_t:"Özel keybox",ck_s:"Kendi keyboxını kullan — oto çekme kapalı",ck_pick:"Keybox dosyası seç",ck_none:"Dosya seçilmedi",ck_have:"keybox.xml",ck_bad:"Geçerli keybox değil",ck_sel:"Seçili keybox:",fm_new:"En yeni",fm_old:"En eski",fm_empty:"Boş klasör",fm_cancel:"İptal"},
+  en:{auto:"Configuration",fp_t:"Fingerprint",fp_s:"Automatic Pixel Canary refresh",kb_t:"Keybox",kb_s:"Auto check, writes only if newer",status:"Keybox status",ind_t:"Status indicator",ind_s:"Show status prefix in description",rs_t:"Block ROM spoof",rs_s:"Disable PixelProps / pihooks engines",int_t:"Check every",donate:"Donate",ckbx:"Custom keybox",ck_t:"Custom keybox",ck_s:"Use your own keybox — auto-fetch off",ck_pick:"Select keybox file",ck_none:"No file selected",ck_have:"keybox.xml",ck_bad:"Not a valid keybox",ck_sel:"Selected keybox:",fm_new:"Newest",fm_old:"Oldest",fm_empty:"Empty folder",fm_cancel:"Cancel",pak:"Target apps",pak_t:"Target apps",pak_s:"Choose apps, mode & keybox",pak_search:"Search apps",pak_default:"Default keybox",pak_import:"Import keybox file…",pak_mode:"Mode",pak_auto:"Auto",pak_auto_s:"Let AlwaysStrong decide",pak_gen:"Generate",pak_gen_s:"Generate the full cert chain (!)",pak_hack:"Hack",pak_hack_s:"Hack the leaf cert (?)",pak_keybox:"Keybox",pak_apply:"Apply",pak_ok:"OK"},
+  tr:{auto:"Yapılandırma",fp_t:"Fingerprint",fp_s:"Otomatik Pixel Canary yenileme",kb_t:"Keybox",kb_s:"Otomatik kontrol, sadece yeniyse yazar",status:"Keybox durumu",ind_t:"Durum göstergesi",ind_s:"Açıklamada durum öneki göster",rs_t:"ROM spoofunu engelle",rs_s:"PixelProps / pihooks motorlarını kapat",int_t:"Kontrol aralığı",donate:"Bağış",ckbx:"Özel keybox",ck_t:"Özel keybox",ck_s:"Kendi keyboxını kullan — oto çekme kapalı",ck_pick:"Keybox dosyası seç",ck_none:"Dosya seçilmedi",ck_have:"keybox.xml",ck_bad:"Geçerli keybox değil",ck_sel:"Seçili keybox:",fm_new:"En yeni",fm_old:"En eski",fm_empty:"Boş klasör",fm_cancel:"İptal",pak:"Hedef uygulamalar",pak_t:"Hedef uygulamalar",pak_s:"Uygulama, mod & keybox seç",pak_search:"Uygulama ara",pak_default:"Varsayılan keybox",pak_import:"Keybox dosyası içe aktar…",pak_mode:"Mod",pak_auto:"Oto",pak_auto_s:"AlwaysStrong karar versin",pak_gen:"Üret (Generate)",pak_gen_s:"Tüm sertifika zincirini üret (!)",pak_hack:"Hack",pak_hack_s:"Leaf sertifikayı değiştir (?)",pak_keybox:"Keybox",pak_apply:"Uygula",pak_ok:"Tamam"},
   ru:{auto:"Автообновление",fp_t:"Fingerprint",fp_s:"Ежечасно с Pixel Canary",kb_t:"Keybox",kb_s:"Ежечасно проверка, запись только если новее",status:"Статус keybox",ind_t:"Индикатор",ind_s:"Показывать префикс в описании",rs_t:"Блок ROM-спуфа",rs_s:"Отключить PixelProps / pihooks",int_t:"Интервал",donate:"Поддержать"},
   es:{auto:"Actualización automática",fp_t:"Fingerprint",fp_s:"Refresco horario desde Pixel Canary",kb_t:"Keybox",kb_s:"Comprobación horaria, escribe solo si es nuevo",status:"Estado del keybox",ind_t:"Indicador",ind_s:"Mostrar prefijo de estado en la descripción",rs_t:"Bloquear ROM spoof",rs_s:"Desactivar PixelProps / pihooks",int_t:"Intervalo",donate:"Donar"},
   pt:{auto:"Atualização automática",fp_t:"Fingerprint",fp_s:"Atualização horária do Pixel Canary",kb_t:"Keybox",kb_s:"Verificação horária, grava só se for novo",status:"Status do keybox",ind_t:"Indicador",ind_s:"Mostrar prefixo de status na descrição",rs_t:"Bloquear ROM spoof",rs_s:"Desativar PixelProps / pihooks",int_t:"Intervalo",donate:"Doar"},
@@ -722,14 +855,33 @@ async function init(){
   }
   function fmBack(){ if(fmPath==="/") return; fmPath=fmPath.replace(/\/[^/]*$/,"")||"/"; fmNav(); }
 
+  // fmMode: "ck" copies the picked file to keybox.xml (the custom-keybox flow);
+  // "import" copies it into the config dir under its own name and hands the
+  // filename back via fmImportCb (used by the per-app keybox picker).
+  let fmMode="ck", fmImportCb=null;
   async function fmChoose(path,name){
     const chk=await ksuExec("head -c 4096 "+shq(path)+" 2>/dev/null | grep -qi -e Keybox -e AndroidAttestation && echo ok || echo bad");
-    if((chk.stdout||"").trim()!=="ok"){ ckSize.textContent=(T.ck_bad||"Not a valid keybox"); fmClose(); return; }
+    if((chk.stdout||"").trim()!=="ok"){
+      if(fmMode!=="import") ckSize.textContent=(T.ck_bad||"Not a valid keybox");
+      fmClose(); return;
+    }
+    if(fmMode==="import"){
+      let fn=name.replace(/[^A-Za-z0-9._-]/g,"_"); if(!/\.xml$/i.test(fn)) fn+=".xml";
+      if(fn.toLowerCase()==="keybox.xml") fn="imported_"+fn;
+      // Record it in .imported_keyboxes so build_target_txt.sh can GC it once
+      // no app references it anymore (manual keyboxes are never listed here, so
+      // they're never auto-deleted).
+      const MAN=CFG+"/.imported_keyboxes";
+      await ksuExec("mkdir -p "+shq(CFG)+" && cp -f "+shq(path)+" "+shq(CFG+"/"+fn)+" && chmod 600 "+shq(CFG+"/"+fn)
+        +" && ( grep -qxF "+shq(fn)+" "+shq(MAN)+" 2>/dev/null || printf '%s\\n' "+shq(fn)+" >> "+shq(MAN)+" )");
+      fmClose(); const cb=fmImportCb; fmImportCb=null; if(cb) cb(fn); return;
+    }
     await ksuExec("mkdir -p "+shq(CFG)+" && cp -f "+shq(path)+" "+shq(KEYBOX)+" && chmod 600 "+shq(KEYBOX)+" && printf '%s' "+shq(name)+" > "+shq(KBNAME));
     fmClose(); await ckRefresh();
   }
-  async function fmOpen(){
-    if(!ck.checked) return;
+  async function fmOpen(mode){
+    fmMode=(typeof mode==="string")?mode:"ck";
+    if(fmMode==="ck" && !ck.checked) return;
     fmPath=FM_START; fm.hidden=false; fmList.classList.remove("switching");
     fmList.innerHTML="";
     fmItems=await fetchDir(fmPath);
@@ -761,6 +913,184 @@ async function init(){
   ckPick.addEventListener("click",fmOpen);
   ckName.addEventListener("click",fmOpen);
   ckDel.addEventListener("click",async ()=>{ await ksuExec(`rm -f "${KEYBOX}" "${KBNAME}"`); await ckRefresh(); });
+
+  // ---- per-app keybox + mode (Tricky-Addon-style app list) ----
+  // map value grammar: "off" (untick) | "<kb>|<mode>" where kb is "-" (default
+  // keybox.xml) or a filename, mode is "auto" | "gen" (!) | "hack" (?). No entry
+  // = ticked, default keybox, auto (forced Google trio defaults to gen).
+  (function pak(){
+    const MAP=CFG+"/app_keybox.map";
+    const FORCED=new Set(["com.android.vending","com.google.android.gms","com.google.android.gsf"]);
+    const appsEl=document.getElementById("apps"), appsList=document.getElementById("appsList");
+    const appsSearch=document.getElementById("appsSearch");
+    const cfg=document.getElementById("cfg"), cfgIcon=document.getElementById("cfgIcon");
+    const cfgName=document.getElementById("cfgName"), cfgPkgEl=document.getElementById("cfgPkg");
+    const cfgAuto=document.getElementById("cfgAuto"), cfgGen=document.getElementById("cfgGen"), cfgHack=document.getElementById("cfgHack");
+    const cfgKbName=document.getElementById("cfgKbName");
+    const kbp=document.getElementById("kbp"), kbpList=document.getElementById("kbpList");
+    const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>';
+    // Generic app-icon fallback for hosts that don't serve ksu://icon/.
+    const FALLBACK="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8a8e' stroke-width='1.5'%3E%3Crect x='4' y='4' width='16' height='16' rx='4.5'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E";
+    let apps=[], labels={}, map={}, cfgPkg=null, cfgMode="auto", cfgKb="-", kbpFiles=[], kbpSel="-";
+
+    appsSearch.placeholder=T.pak_search||"Search apps";
+
+    async function loadMap(){
+      const r=await ksuExec(`cat ${shq(MAP)} 2>/dev/null`); map={};
+      (r.stdout||"").split("\n").forEach(l=>{ if(!l) return; const i=l.indexOf("\t"); if(i<1) return; map[l.slice(0,i).trim()]=l.slice(i+1).trim(); });
+    }
+    async function saveMap(){
+      let body=""; Object.keys(map).sort().forEach(p=>{ if(map[p]) body+=p+"\t"+map[p]+"\n"; });
+      // persist the map, then rebuild target.txt so TrickyStore reloads it now
+      await ksuExec(`mkdir -p ${shq(CFG)} && printf %s ${shq(body)} > ${shq(MAP)}; sh ${shq(MOD+"/build_target_txt.sh")} ${shq(CFG+"/target.txt")} >/dev/null 2>&1`);
+    }
+    async function loadApps(){
+      const r=await ksuExec(`{ pm list packages -3; echo com.google.android.gms; echo com.google.android.gsf; echo com.android.vending; } 2>/dev/null | sed 's/^package://' | sort -u`);
+      apps=(r.stdout||"").split("\n").map(s=>s.trim()).filter(Boolean);
+      // Real app labels via the KSU WebUI package bridge (WebUI-X / KSUWebUIStandalone).
+      // Synchronous; absent on the basic host — then rows fall back to the package name.
+      labels={};
+      try{
+        if(typeof ksu!=="undefined" && ksu.getPackagesInfo){
+          const info=JSON.parse(ksu.getPackagesInfo(JSON.stringify(apps)));
+          (info||[]).forEach(x=>{ if(x&&x.packageName) labels[x.packageName]=x.appLabel||""; });
+        }
+      }catch(e){}
+    }
+    async function availKeyboxes(){
+      const r=await ksuExec(`ls -1 ${shq(CFG)} 2>/dev/null | grep -i '\\.xml$'`);
+      return (r.stdout||"").split("\n").map(s=>s.trim()).filter(f=>f && f.toLowerCase()!=="keybox.xml");
+    }
+    function specOf(pkg){
+      const v=map[pkg];
+      if(v==="off") return {off:true};
+      if(!v) return {kb:"-", mode:FORCED.has(pkg)?"gen":"auto"};
+      const b=v.split("|"); return {kb:b[0]||"-", mode:b[1]||"auto"};
+    }
+    function chkClass(pkg){
+      const s=specOf(pkg); if(s.off) return "";
+      if(s.mode==="gen") return " on gen";
+      if(s.mode==="hack") return " on hack";
+      return " on";
+    }
+    function badge(pkg){
+      const s=specOf(pkg); if(s.off||!s.kb||s.kb==="-") return "";
+      return `<span class="app-badge">${esc(s.kb.replace(/\.xml$/i,""))}</span>`;
+    }
+    function render(){
+      const q=(appsSearch.value||"").toLowerCase().trim();
+      const list=q?apps.filter(p=>{ const l=labels[p]||""; return p.toLowerCase().includes(q)||l.toLowerCase().includes(q); }):apps;
+      if(!list.length){ appsList.innerHTML=`<div class="fm-empty">${esc(T.fm_empty||"Empty")}</div>`; return; }
+      let html=""; for(const p of list){
+        const lbl=labels[p];
+        const meta=lbl?`<div class="app-nm">${esc(lbl)}</div><div class="app-pkg">${esc(p)}</div>`:`<div class="app-nm">${esc(p)}</div>`;
+        html+=`<div class="fm-item" data-pkg="${esc(p)}"><img class="app-icon" data-pkg="${esc(p)}" alt="" draggable="false"><div class="fm-info">${meta}</div>${badge(p)}<div class="app-chk${chkClass(p)}">${CHK}</div></div>`;
+      }
+      appsList.innerHTML=html;
+      lazyIcons();
+    }
+    // Lazy-load icons only as rows scroll into view (Tricky-Addon does the same;
+    // ksu://icon/ is served by the host, with a graceful fallback glyph).
+    let io=null;
+    function lazyIcons(){
+      if(io) io.disconnect();
+      io=new IntersectionObserver((ents)=>{
+        ents.forEach(en=>{ if(!en.isIntersecting) return; const img=en.target;
+          img.onerror=()=>{ img.onerror=null; img.src=FALLBACK; };
+          img.src="ksu://icon/"+img.dataset.pkg; io.unobserve(img);
+        });
+      },{root:appsList,rootMargin:"150px",threshold:.01});
+      appsList.querySelectorAll(".app-icon").forEach(el=>io.observe(el));
+    }
+
+    async function toggleTick(pkg){
+      if(map[pkg]==="off") delete map[pkg]; else map[pkg]="off";
+      render(); await saveMap();
+    }
+
+    // ---- long-press: per-app config (mode + keybox) ----
+    function setMode(m){
+      cfgMode=m;
+      [cfgAuto,cfgGen,cfgHack].forEach(b=>{ const on=b.dataset.m===m; b.classList.toggle("on",on); b.setAttribute("aria-pressed",on); });
+    }
+    function updKbName(){ cfgKbName.textContent = cfgKb==="-" ? (T.pak_default||"Default keybox") : cfgKb.replace(/\.xml$/i,""); }
+    function openCfg(pkg){
+      cfgPkg=pkg; const s=specOf(pkg);
+      cfgMode=s.off?"auto":(s.mode||"auto"); cfgKb=(s.off||!s.kb)?"-":s.kb;
+      cfgName.textContent=labels[pkg]||pkg; cfgPkgEl.textContent=pkg;
+      cfgIcon.onerror=()=>{ cfgIcon.onerror=null; cfgIcon.src=FALLBACK; }; cfgIcon.src="ksu://icon/"+pkg;
+      setMode(cfgMode); updKbName();
+      cfg.hidden=false;
+    }
+    async function applyCfg(){
+      // "-" + auto == default, so store nothing (keeps the map minimal); any other
+      // combo becomes "<kb>|<mode>". Applying always ticks the app (clears "off").
+      const spec=(cfgKb==="-" && cfgMode==="auto")?null:(cfgKb+"|"+cfgMode);
+      if(spec) map[cfgPkg]=spec; else delete map[cfgPkg];
+      cfg.hidden=true; render(); await saveMap();
+    }
+
+    // ---- keybox-only picker (opened from the config row) ----
+    // Tapping a row only HIGHLIGHTS it (kbpSel); the selection is committed to
+    // cfgKb by the OK button. Back arrow / backdrop cancels without changing it.
+    function renderKbp(){
+      const row=(v,t,sub)=>`<div class="fm-item${kbpSel===v?" pick":""}" data-v="${esc(v)}"><div class="fm-info"><div class="fm-nm">${esc(t)}</div>${sub?`<div class="fm-sub">${esc(sub)}</div>`:""}</div>${kbpSel===v?`<div class="app-chk on">${CHK}</div>`:""}</div>`;
+      let html=row("-", T.pak_default||"Default keybox", "keybox.xml");
+      for(const f of kbpFiles) html+=row(f, f.replace(/\.xml$/i,""), f);
+      html+=`<div class="fm-item kbp-import" data-v="__import"><div class="fm-info"><div class="fm-nm">${esc(T.pak_import||"Import keybox file…")}</div></div></div>`;
+      kbpList.innerHTML=html;
+    }
+    async function openKbp(){ kbpSel=cfgKb; kbpFiles=await availKeyboxes(); renderKbp(); kbp.hidden=false; }
+    function closeKbp(){ kbp.hidden=true; }
+    function okKbp(){ cfgKb=kbpSel; updKbName(); closeKbp(); }
+
+    async function open(){
+      appsSearch.value=""; appsEl.hidden=false;
+      appsList.innerHTML=`<div class="fm-empty">…</div>`;
+      await loadMap(); await loadApps(); render();
+    }
+
+    document.getElementById("pakRow").addEventListener("click",open);
+    document.getElementById("appsBack").addEventListener("click",()=>{ appsEl.hidden=true; });
+    document.getElementById("appsOk").addEventListener("click",()=>{ appsEl.hidden=true; });
+    appsEl.addEventListener("click",e=>{ if(e.target===appsEl) appsEl.hidden=true; });
+    appsSearch.addEventListener("input",render);
+
+    // gesture: short tap -> toggle spoof tick; long-press -> per-app config
+    let lpTimer=null, downPkg=null;
+    const pkgOf=e=>{ const it=e.target.closest(".fm-item"); return it?it.dataset.pkg:null; };
+    appsList.addEventListener("pointerdown",e=>{
+      downPkg=pkgOf(e); if(!downPkg) return;
+      lpTimer=setTimeout(()=>{ lpTimer=null; openCfg(downPkg); },420);
+    });
+    const cancelLp=()=>{ if(lpTimer){ clearTimeout(lpTimer); lpTimer=null; } };
+    appsList.addEventListener("pointermove",cancelLp);
+    appsList.addEventListener("pointercancel",cancelLp);
+    appsList.addEventListener("pointerup",e=>{
+      if(!lpTimer) return; clearTimeout(lpTimer); lpTimer=null;
+      const pkg=pkgOf(e); if(pkg && pkg===downPkg) toggleTick(pkg);
+    });
+
+    // config dialog interactions
+    cfgAuto.addEventListener("click",()=>setMode("auto"));
+    cfgGen.addEventListener("click",()=>setMode("gen"));
+    cfgHack.addEventListener("click",()=>setMode("hack"));
+    document.getElementById("cfgKbRow").addEventListener("click",openKbp);
+    document.getElementById("cfgClose").addEventListener("click",()=>{ cfg.hidden=true; });
+    document.getElementById("cfgApply").addEventListener("click",applyCfg);
+    cfg.addEventListener("click",e=>{ if(e.target===cfg) cfg.hidden=true; });
+
+    // keybox picker interactions — tap highlights, OK commits, back/backdrop cancels
+    document.getElementById("kbpBack").addEventListener("click",closeKbp);
+    document.getElementById("kbpOk").addEventListener("click",okKbp);
+    kbp.addEventListener("click",e=>{ if(e.target===kbp) closeKbp(); });
+    kbpList.addEventListener("click",e=>{
+      const it=e.target.closest(".fm-item"); if(!it) return;
+      const v=it.dataset.v;
+      if(v==="__import"){ fmImportCb=async (fn)=>{ kbpFiles=await availKeyboxes(); kbpSel=fn; renderKbp(); }; fmOpen("import"); return; }
+      kbpSel=v; renderKbp();
+    });
+  })();
 }
 init();
 </script>

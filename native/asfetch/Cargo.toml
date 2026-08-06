@@ -17,6 +17,10 @@ path = "src/main.rs"
 # and hang the whole request on IPv4-only networks that still advertise AAAA.
 rustls = "0.21"
 webpki-roots = "0.25"
+# serde_json: robust parse of Google's flashstation builds JSON for the native
+# fingerprint fetch (`asfetch autopif`) — a real parser instead of grep/tac line
+# windows that break on entries with long license blocks.
+serde_json = "1"
 
 [profile.release]
 opt-level = "z"

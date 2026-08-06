@@ -4,11 +4,9 @@ name: Release
 # builds the installable zips on GitHub's runners and attaches them to the
 # release. They are produced from source here — never uploaded by hand.
 #
-# One tag ships both lines:
-#   AlwaysStrong-<ver>.zip         PlayIntegrityFork (default, all ABIs)
-#   AlwaysStrong-<ver>-inject.zip  PlayIntegrityFix inject-s (ARM only)
-# build.sh builds the second one from the `inject` branch, so the checkout has
-# to bring that branch along.
+# One tag ships both release lines, both built from this tree:
+#   AlwaysStrong-<ver>.zip         PlayIntegrityFork
+#   AlwaysStrong-<ver>-inject.zip  PlayIntegrityFix inject-s
 
 on:
   push:
@@ -26,9 +24,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Fetch the inject branch (second build line)
-        run: git fetch --no-tags origin +refs/heads/inject:refs/heads/inject
 
       - name: Install packaging tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zip unzip
@@ -74,21 +69,17 @@ jobs:
             exit 0
           fi
           git checkout main
+          # both lines carry the same version — module/module.prop defines it once
+          ver=$(sed -n 's/^version=//p' module/module.prop)
+          code=$(sed -n 's/^versionCode=//p' module/module.prop)
           write_manifest() {
             printf '{\n  "version": "%s",\n  "versionCode": %s,\n  "zipUrl": "https://github.com/%s/releases/download/%s/%s",\n  "changelog": "https://raw.githubusercontent.com/%s/main/CHANGELOG.md"\n}\n' \
-              "$3" "$4" "$GITHUB_REPOSITORY" "$tag" "$2" "$GITHUB_REPOSITORY" > "$1"
+              "$ver" "$code" "$GITHUB_REPOSITORY" "$tag" "$2" "$GITHUB_REPOSITORY" > "$1"
           }
           fork_zip=$(cd out && ls AlwaysStrong-*.zip | grep -v -- '-inject' | head -1)
           inj_zip=$(cd out && ls AlwaysStrong-*-inject.zip 2>/dev/null | head -1 || true)
-          write_manifest update.json "$fork_zip" \
-            "$(sed -n 's/^version=//p' module/module.prop)" \
-            "$(sed -n 's/^versionCode=//p' module/module.prop)"
-          if [ -n "$inj_zip" ]; then
-            git show inject:module/module.prop > /tmp/inject.prop
-            write_manifest update-inject.json "$inj_zip" \
-              "$(sed -n 's/^version=//p' /tmp/inject.prop)" \
-              "$(sed -n 's/^versionCode=//p' /tmp/inject.prop)"
-          fi
+          write_manifest update.json "$fork_zip"
+          [ -n "$inj_zip" ] && write_manifest update-inject.json "$inj_zip"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add update.json update-inject.json
