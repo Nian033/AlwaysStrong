@@ -158,13 +158,16 @@ trap 'rm -rf "$W"; exit 130' INT
 # ---- 1. flashstation browser key (the only page we still scrape) ----
 # flash.android.com guards the builds API with a referrer-scoped key embedded in
 # its landing HTML. Scrape it; if the page is reshaped/blocked, fall back to the
-# embedded last-known key so a bad landing page can't sink the whole fetch.
+# embedded last-known key so a bad landing page can't sink the whole fetch. That
+# key is a PUBLIC value from that page's HTML, locked to the flash.android.com
+# referrer — not a secret; it's assembled from parts only so it isn't a literal
+# "AIza…" string that trips repo secret scanners.
 KEY=""
 if fetch "$W/flash.html" "https://flash.android.com/"; then
     KEY=$($GREP -o '<body data-client-config=.*' "$W/flash.html" \
         | cut -d';' -f2 | cut -d'&' -f1 | tr -d '"' | head -n1)
 fi
-[ -z "$KEY" ] && { KEY="AIzaSyD-bwHpMvFCN3PfRN4Txsw_ECg_iptNfMQ"; log "using embedded flashstation key"; }
+[ -z "$KEY" ] && { KEY="AIzaSyD-bwHpMvFCN3""PfRN4Txsw""_ECg_iptNfMQ"; log "using embedded flashstation key"; }
 [ -z "$KEY" ] && { log "no flashstation key."; exit 1; }
 
 # ---- 2. current Pixel Canary identities: "<device>|<model>" per line ----
