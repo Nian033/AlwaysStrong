@@ -3,7 +3,8 @@
 ## v1.0.3
 
 - Added a second build, `-inject`, running on PlayIntegrityFix inject-s. A lot of you asked for it. Try it if the default doesn't reach STRONG on your device.
-- Per-app keybox: pick which keybox each app uses from the WebUI.
+- Per-app keybox: assign a different keybox to specific apps from the WebUI, instead of one keybox for everything. Import your own keybox files, pick which app gets which, and the rest keep using the default — handy when one app needs a separate key.
+- Collect logs button in the WebUI (also `sh action.sh logs`) that saves a diagnostic report to `/sdcard` for issue reports.
 - Updated TEESimulator-RS to v6.0.1-307.
 - Bug fixes.
 
