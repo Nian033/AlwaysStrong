@@ -101,15 +101,29 @@ The verdict updates a few seconds later. No reboot is needed. The same fingerpri
 
 ## Building
 
-The repo ships no upstream binaries. `build.sh` downloads the pinned upstream release ZIPs, overlays the glue scripts in `module/`, and produces one installable ZIP. On Windows run it from WSL or Git Bash.
+The repo ships no upstream binaries. `build.sh` downloads the pinned upstream release ZIPs, overlays the glue scripts in `module/`, and produces the installable ZIPs. On Windows run it from WSL or Git Bash (7-Zip is used automatically when Info-ZIP `zip` is missing).
 
 ```bash
 ./build.sh                              # pinned upstream versions
 ./build.sh --clean                      # wipe build/ and rebuild
-./build.sh --tee v6.0.1-282 --pif v17   # override upstream tags
+./build.sh --no-inject                  # default build only
+./build.sh --tee v6.0.1-307 --pif v17   # override upstream tags
 ```
 
-Output is `out/AlwaysStrong-<version>.zip`. Bump upstream pins by editing the defaults at the top of `build.sh`, or run `scripts/update-upstream.sh --apply` to pull the latest. A daily GitHub Action does this and opens a PR.
+Every run produces both lines:
+
+- `out/AlwaysStrong-<version>.zip` — the default build (PlayIntegrityFork, all ABIs)
+- `out/AlwaysStrong-<version>-inject.zip` — the ARM build (PlayIntegrityFix inject-s)
+
+The `-inject` line lives on the `inject` branch, so `build.sh` exports that ref into `build/inject-src` and builds it there. You need that branch locally (`git fetch origin inject:inject`); without it the second zip is skipped with a warning.
+
+To pull upstream and repackage in one go:
+
+```bash
+scripts/update-upstream.sh --apply --build
+```
+
+That bumps the pinned TEESimulator-RS / Play Integrity versions in `build.sh` to the newest upstream release — **prereleases included**, which is where TEESimulator-RS publishes its freshest builds — and rebuilds. Drop `--build` to only bump, add `--stable-only` to ignore prereleases. A weekly GitHub Action runs the same check on both branches and opens a PR.
 
 ## Credits
 
