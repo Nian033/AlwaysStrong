@@ -12,6 +12,10 @@ on:
   push:
     tags:
       - 'v*'
+  # Also runnable from the Actions tab (or the API) against a tag ref, for when
+  # a tag-push event doesn't fire the run on its own. Dispatched on a tag,
+  # github.ref_name is that tag, so every step below behaves the same as a push.
+  workflow_dispatch:
 
 permissions:
   contents: write
