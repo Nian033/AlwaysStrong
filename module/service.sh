@@ -211,9 +211,25 @@ if [ ! -f "$MODDIR/.bootstrapped" ]; then
     done
     log -t "AlwaysStrong-boot" "first boot: starting bootstrap"
 
-    # 1. keybox (skipped entirely in custom-keybox mode — user's own keybox)
+    # 1. keybox (skipped entirely in custom-keybox mode — user's own keybox).
+    #    Retry with backoff: ping 1.1.1.1 only proves raw IP connectivity, not
+    #    that DNS is up, and on ROMs where the resolver comes late (AOSP builds
+    #    like ArrowOS) the first fetch resolves nothing and a single attempt
+    #    would leave the device with no keybox until the hourly refresh. Stop as
+    #    soon as one lands (rc 0 = updated, 2 = already current).
     if [ ! -f /data/adb/tricky_store/custom_keybox ] && [ -x "$MODDIR/keybox_fetch.sh" ]; then
-        sh "$MODDIR/keybox_fetch.sh" 2>&1 | log -t "AlwaysStrong-boot"
+        kb_try=0
+        while :; do
+            # to a file, not a pipe: in `cmd | log`, $? is log's exit code, so a
+            # piped keybox_fetch.sh would always look like it succeeded.
+            sh "$MODDIR/keybox_fetch.sh" >/data/adb/tricky_store/.kb_boot.log 2>&1
+            kb_rc=$?
+            cat /data/adb/tricky_store/.kb_boot.log 2>/dev/null | log -t "AlwaysStrong-boot"
+            { [ "$kb_rc" = 0 ] || [ "$kb_rc" = 2 ]; } && break
+            kb_try=$((kb_try+1)); [ $kb_try -ge 6 ] && break
+            sleep $((kb_try * 10))   # 10s, 20s, 30s, 40s, 50s
+        done
+        rm -f /data/adb/tricky_store/.kb_boot.log
     fi
 
     # 2. fingerprint + security patch. Our native crawl is primary; upstream's
