@@ -101,6 +101,41 @@ PIF_ASSET_CUR=$(current_value PIF_ASSET_DEFAULT)
 echo "    TEE: $TEE_TAG_CUR  ->  $TEE_TAG_NEW   ($TEE_ASSET_NEW, $TEE_KIND)"
 echo "    PIF: $PIF_TAG_CUR  ->  $PIF_TAG_NEW   ($PIF_ASSET_NEW, $PIF_KIND)"
 
+# --- the other release line -------------------------------------------------
+# build.sh emits BOTH zips from one run, but each line pins its own upstream in
+# its own branch's build.sh — so checking only this branch silently leaves the
+# sibling on a stale engine. Report it here (read-only: patching another branch
+# from a working tree you are not on is how you lose edits) and say how to apply.
+sibling_report() {
+    local ref sib_build sib_repo sib_tag sib_prefer
+    if grep -q 'KOWX712/PlayIntegrityFix' "$BUILD_SH"; then ref=main; else ref=inject; fi
+    git -C "$ROOT" rev-parse --verify -q "${ref}^{commit}" >/dev/null 2>&1 || return 0
+
+    sib_build=$(git -C "$ROOT" show "${ref}:build.sh" 2>/dev/null) || return 0
+    # the PIF download line specifically — TEE's URL sits above it in build.sh
+    sib_repo=$(printf '%s' "$sib_build" \
+        | grep -F 'releases/download/$PIF_TAG' \
+        | grep -oE 'github\.com/[^/]+/[^/]+/releases/download' | head -1 \
+        | cut -d/ -f2,3)
+    sib_tag=$(printf '%s' "$sib_build" | sed -n 's/^PIF_TAG_DEFAULT="\(.*\)"/\1/p' | head -1)
+    [[ -n "$sib_repo" && -n "$sib_tag" ]] || return 0
+    case "$sib_repo" in *PlayIntegrityFix*) sib_prefer=inject-s ;; *) sib_prefer="" ;; esac
+
+    local out
+    out=$(api_latest "$sib_repo" "$sib_prefer") || return 0
+    local new_tag
+    new_tag=$(printf '%s' "$out" | sed -n 1p | tr -d '\r')
+    [[ -n "$new_tag" ]] || return 0
+
+    if [[ "$sib_tag" == "$new_tag" ]]; then
+        echo "    $ref line: $sib_tag (up to date, $sib_repo)"
+    else
+        echo "    $ref line: $sib_tag  ->  $new_tag   ($sib_repo)"
+        echo "               apply with: git checkout $ref && scripts/update-upstream.sh --apply"
+    fi
+}
+sibling_report
+
 CHANGED=0
 [[ "$TEE_TAG_CUR" != "$TEE_TAG_NEW" || "$TEE_ASSET_CUR" != "$TEE_ASSET_NEW" ]] && CHANGED=1
 [[ "$PIF_TAG_CUR" != "$PIF_TAG_NEW" || "$PIF_ASSET_CUR" != "$PIF_ASSET_NEW" ]] && CHANGED=1
