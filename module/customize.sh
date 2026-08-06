@@ -21,9 +21,11 @@ esac
 [ "$API" -lt "$MIN_SDK" ] && abort "needs Android 10+ (SDK $MIN_SDK)"
 
 VERSION=$(grep_prop version "${TMPDIR}/module.prop")
+# read the name from module.prop so the -inject build shows "[inject]" here too
+NAME=$(grep_prop name "${TMPDIR}/module.prop")
 install_file() { unzip -qqjo "$ZIPFILE" "$1" -d "$2" || abort "extract failed: $1"; }
 
-ui_print "AlwaysStrong $VERSION"
+ui_print "${NAME:-AlwaysStrong} $VERSION"
 ui_print "by @evokerr  -  t.me/keyboxstrong"
 ui_print ""
 

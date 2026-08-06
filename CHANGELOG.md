@@ -2,25 +2,10 @@
 
 ## v1.0.3
 
-Newer TEE engine, a quieter installer, and both builds shipped from one release.
-
-**Attestation engine**
-- TEESimulator-RS bumped to `v6.0.1-307`. Upstream ships its newest builds as GitHub *prereleases*, which the update checker's `/releases/latest` lookup silently skipped — so the module sat on `v6.0.1-282` (19 Jun) while `-307` (11 Jul) was out. The checker now scans every non-draft release.
-
-**Install output**
-- Trimmed the noise: no more "default keybox installed", no "WebUI ready" (the WebUI is right there in your manager), and Zygisk just reports `zygisk found`. The KernelSU-without-Zygisk warning stays — that one silently costs you STRONG.
-
-**Per-app keybox in the default build**
-- The default build gains what had only shipped in the `-inject` one: the multi-keybox WebUI (assign a keybox per app), the target-list rebuild behind it, native fingerprint fetch via `asfetch autopif` (~2–5s, against ~24s for the shell crawl), and logcat / ANR / tombstone sanitisation. None of it was engine-specific.
-
-**One tree, two builds**
-- The two lines were separate branches, which meant writing every fix twice. They share one tree now: `module/` for everything common, `module-variants/<line>/` for what differs — chiefly an `engine.sh` adapter naming the prop file that engine's zygisk reads, its spoof-flag names, and how its fetcher runs. One `./build.sh` emits both zips, and `version` is defined once.
-
-**Architectures**
-- The `-inject` build installs on x86 / x86_64 instead of aborting, and now carries x86 TEE libraries and watcher. Its Play Integrity spoof is still ARM-only — PlayIntegrityFix inject-s builds no x86 zygisk — so on x86 the installer says so and points at the default build.
-
-**Credits**
-- Added KOWX712 (PlayIntegrityFix inject-s, KsuWebUIStandalone).
+- Added a second build, `-inject`, running on PlayIntegrityFix inject-s. A lot of you asked for it. Try it if the default doesn't reach STRONG on your device.
+- Per-app keybox: pick which keybox each app uses from the WebUI.
+- Updated TEESimulator-RS to v6.0.1-307.
+- Bug fixes.
 
 ## v1.0.2
 
