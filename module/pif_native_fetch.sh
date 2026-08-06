@@ -79,6 +79,13 @@ fi
 if [ -n "$ABI" ] && [ -x "$ASFETCH" ]; then
     NW="$CONFIG_DIR/.pif_asfetch.$$"
     mkdir -p "$NW"
+    # The caller bounds us with `timeout`, so a SIGTERM lands mid-fetch often
+    # enough to matter — without traps the scratch dir piles up in the config
+    # dir. INT/TERM must exit explicitly: busybox ash resumes the script after a
+    # trap, which would leave the fetch writing into a dir we just deleted.
+    trap 'rm -rf "$NW"' EXIT
+    trap 'rm -rf "$NW"; exit 143' TERM
+    trap 'rm -rf "$NW"; exit 130' INT
     [ -f "$TARGET" ] && cp -f "$TARGET" "$NW/pif.prop" 2>/dev/null
     if "$ASFETCH" autopif --out "$NW/pif.prop" --module "$NW" 2>&1 \
        && grep -q '^FINGERPRINT=google/.*:CANARY/' "$NW/pif.prop" 2>/dev/null; then
@@ -86,13 +93,13 @@ if [ -n "$ABI" ] && [ -x "$ASFETCH" ]; then
         engine_spoof_block >> "$NW/identity.prop"
         if engine_install_pif "$NW/identity.prop"; then
             cp -f "$NW/identity.prop" "$TARGET" 2>/dev/null
-            rm -rf "$NW"
             log "native autopif ok ($ENGINE)"
             exit 0
         fi
         log "native autopif fetched, but $ENGINE could not install it"
     fi
     rm -rf "$NW"
+    trap - EXIT TERM INT   # hand the traps over to the shell crawl's own $W
     log "native autopif unavailable/failed — trying shell crawl"
 fi
 

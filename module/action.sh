@@ -141,10 +141,17 @@ if [ "$FP_OK" = 0 ]; then
     sleep 1
 
     # 2. upstream's own fetcher (FALLBACK), whichever engine is installed.
-    #    Bounded so its crawl can't freeze the Action.
+    #    Bounded so its crawl can't freeze the Action. `timeout` needs a command,
+    #    not a shell function, so this re-enters a subshell — and the engine
+    #    functions read $MODPATH / $CONFIG_DIR / $SED_I, which are plain shell
+    #    variables here. Pass them through the environment: without the prefix
+    #    the subshell sees them empty, engine_autopif looks for /autopif4.sh,
+    #    and the fallback silently never runs.
     if command -v timeout >/dev/null 2>&1; then
-        timeout "$ENGINE_AUTOPIF_TIMEOUT" sh -c '. "$1/engine.sh"; engine_autopif' \
-            _ "$MODPATH" >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
+        MODPATH="$MODPATH" CONFIG_DIR="$CONFIG_DIR" SED_I="$SED_I" \
+            timeout "$ENGINE_AUTOPIF_TIMEOUT" \
+            sh -c '. "$MODPATH/engine.sh"; engine_autopif' \
+            >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
     else
         engine_autopif >>"$CONFIG_DIR/autopif.log" 2>&1 && FP_OK=1
     fi

@@ -380,7 +380,11 @@ fi
 #      overridable — they are defined once, in module/module.prop, so the two
 #      lines can never drift apart on the number users see.
 if [[ -f "$VDIR/module.prop.override" ]]; then
-    while IFS= read -r line; do
+    # Rewritten with awk, not sed: the replacement text is a description string,
+    # and in a sed replacement `&` expands to the whole match and `\` escapes —
+    # so a perfectly reasonable description would silently corrupt module.prop.
+    # awk takes the line as a variable and never reinterprets it.
+    while IFS= read -r line || [[ -n "$line" ]]; do
         [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
         local k="${line%%=*}"
         case "$k" in
@@ -389,7 +393,10 @@ if [[ -f "$VDIR/module.prop.override" ]]; then
         esac
         grep -q "^${k}=" "$STAGE/module.prop" \
             || die "$VARIANT/module.prop.override sets unknown key '$k'"
-        sed -i "s|^${k}=.*|${line//|/\\|}|" "$STAGE/module.prop"
+        awk -v key="$k=" -v repl="$line" \
+            'index($0, key) == 1 { print repl; next } { print }' \
+            "$STAGE/module.prop" > "$STAGE/module.prop.new" \
+            && mv "$STAGE/module.prop.new" "$STAGE/module.prop"
     done < "$VDIR/module.prop.override"
     green "    applied module.prop overrides"
 fi
@@ -577,8 +584,8 @@ green "    ok — PIF reads only /data/adb/modules/tricky_store"
 #    Android /system/bin/sh treats `\r` as part of arguments — a CRLF customize.sh
 #    fails with cryptic "no such file" errors. Strip CR from anything text-like.
 bold "==> Normalizing line endings (LF) on shipped scripts"
-for f in "$STAGE"/*.sh "$STAGE/daemon" "$STAGE/module.prop" "$STAGE/target.txt" \
-         "$STAGE/sepolicy.rule" \
+for f in "$STAGE"/*.sh "$STAGE"/*.prop "$STAGE/daemon" "$STAGE/module.prop" \
+         "$STAGE/target.txt" "$STAGE/description.txt" "$STAGE/sepolicy.rule" \
          "$STAGE/META-INF/com/google/android/update-binary" \
          "$STAGE/META-INF/com/google/android/updater-script"; do
     [ -f "$f" ] && sed -i 's/\r$//' "$f"

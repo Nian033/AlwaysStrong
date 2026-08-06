@@ -236,7 +236,6 @@ if [ ! -f "$MODDIR/.bootstrapped" ]; then
     engine_enforce_spoof
     log -t "AlwaysStrong-boot" "STRONG enforced ($ENGINE)"
 
-
     # 4. restart PI consumers so they pick up the new state
     killall -9 com.google.android.gms.unstable 2>/dev/null
     killall -9 com.android.vending 2>/dev/null
