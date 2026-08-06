@@ -268,6 +268,19 @@ h1{
 .foot a.tg svg{color:var(--tg)}
 .foot a.dn svg{color:var(--heart)}
 
+/* ---------------- toast ---------------- */
+.toast{
+  position:fixed;left:50%;bottom:24px;
+  transform:translateX(-50%) translateY(20px);
+  max-width:88%;background:var(--card);color:var(--fg);
+  border:1px solid var(--line);box-shadow:var(--shadow-pop);
+  border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.4;
+  opacity:0;pointer-events:none;z-index:100;
+  word-break:break-all;text-align:center;
+  transition:opacity .2s,transform .2s;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
 /* ---------------- mount animations ---------------- */
 @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .hd,.lbl,.card{animation:rise .4s cubic-bezier(.2,.7,.2,1) both}
@@ -666,21 +679,31 @@ const INT_FILE=CFG+"/hourly_interval_sec";
 const MOD="/data/adb/modules/tricky_store";
 const KEY_HOST="http://evoker.qzz.io";
 
-// Collect logs -> /sdcard/AlwaysStrong-log.txt, for attaching to a GitHub issue.
+// Collect logs -> /sdcard/AlwaysStrong-log-<timestamp>.txt for a GitHub issue.
+// The button label stays put; the result shows in a toast so a long path never
+// mangles the footer.
+let toastT=null;
+function toast(msg,ms){
+  let el=document.getElementById("toast");
+  if(!el){ el=document.createElement("div"); el.id="toast"; el.className="toast"; document.body.appendChild(el); }
+  el.textContent=msg; el.classList.add("show");
+  clearTimeout(toastT);
+  if(ms) toastT=setTimeout(()=>el.classList.remove("show"),ms);
+}
 const logBtn=document.getElementById("logBtn");
 if(logBtn){
-  const logLbl=document.getElementById("logBtnLbl");
   logBtn.addEventListener("click",async()=>{
-    const idle=(T.logs||"Collect logs");
-    logBtn.disabled=true; logLbl.textContent=(T.logs_run||"Collecting…");
+    if(logBtn.dataset.busy) return;
+    logBtn.dataset.busy="1";
+    toast(T.logs_run||"Collecting…",0);
     const r=await ksuExec(`sh ${MOD}/collect_logs.sh`);
     const path=(r.stdout||"").trim().split("\n").pop();
     if(r.errno===0 && path){
-      logLbl.textContent=(T.logs_done||"Saved:")+" "+path;
+      toast((T.logs_done||"Saved:")+" "+path,7000);
     }else{
-      logLbl.textContent=(T.logs_fail||"Failed — run via root shell");
+      toast(T.logs_fail||"Failed — run via root shell",5000);
     }
-    setTimeout(()=>{ logLbl.textContent=idle; logBtn.disabled=false; },6000);
+    delete logBtn.dataset.busy;
   });
 }
 

@@ -18,7 +18,12 @@ MODDIR=$(cd "${0%/*}" 2>/dev/null && pwd)
 # section isn't blank when someone runs the script from /sdcard or /tmp)
 [ -f "$MODDIR/module.prop" ] || MODDIR=/data/adb/modules/tricky_store
 CFG=/data/adb/tricky_store
-OUT=/sdcard/AlwaysStrong-log.txt
+KEY_HOST="${KEYBOX_BASE_URL:-http://evoker.qzz.io}"
+
+# Timestamped filename so repeated collections don't overwrite each other. If
+# date is somehow unavailable, fall back to a fixed name.
+STAMP=$(date +%Y%m%d-%H%M%S 2>/dev/null)
+[ -n "$STAMP" ] && OUT="/sdcard/AlwaysStrong-log-$STAMP.txt" || OUT="/sdcard/AlwaysStrong-log.txt"
 
 # busybox for the tools toybox may lack (sha256sum on old devices, etc.)
 BB=""
@@ -27,6 +32,14 @@ for bb in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/bu
     [ -x "$bb" ] && BB="$bb" && break
 done
 sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; elif [ -n "$BB" ]; then "$BB" sha256sum; else echo "n/a"; fi; }
+
+# asfetch, the same native fetcher the module uses — the one that fails on some
+# ROMs, so it's exactly what we want to test here.
+case "$(uname -m)" in
+    aarch64) ABI=arm64-v8a ;; armv7*|armv8l) ABI=armeabi-v7a ;;
+    x86_64) ABI=x86_64 ;; i?86) ABI=x86 ;; *) ABI="" ;;
+esac
+ASFETCH="$MODDIR/bin/$ABI/asfetch"
 
 sec() { echo ""; echo "===== $* ====="; }
 
@@ -84,6 +97,44 @@ fi
 
 sec "Config dir"
 ls -l "$CFG" 2>/dev/null
+
+sec "Network (most keybox/fingerprint failures are here)"
+# raw IP reachability — no DNS involved
+for ip in 1.1.1.1 8.8.8.8; do
+    if ping -c1 -W2 "$ip" >/dev/null 2>&1; then echo "ping $ip: ok"; else echo "ping $ip: FAIL"; fi
+done
+# DNS: can the keybox host be resolved? Resolver often comes up late on some
+# AOSP ROMs, which is what leaves them with no keybox on first boot.
+HOST=$(echo "$KEY_HOST" | sed -e 's#^[a-z]*://##' -e 's#/.*##' -e 's#:.*##')
+if command -v getent >/dev/null 2>&1 && getent hosts "$HOST" >/dev/null 2>&1; then
+    echo "dns $HOST: ok ($(getent hosts "$HOST" | awk '{print $1}' | tr '\n' ' '))"
+elif [ -n "$BB" ] && "$BB" nslookup "$HOST" >/dev/null 2>&1; then
+    echo "dns $HOST: ok (via nslookup)"
+else
+    echo "dns $HOST: FAIL — cannot resolve (resolver not up / blocked)"
+fi
+# actual keybox fetch, one attempt per engine, with timing — shows which
+# downloader works on this ROM and how long it takes.
+NT="$CFG/.netcheck.$$"; mkdir -p "$NT"; trap 'rm -rf "$NT"' EXIT INT TERM
+test_engine() {
+    _name="$1"; shift
+    _t0=$(date +%s 2>/dev/null)
+    rm -f "$NT/out"
+    "$@" >/dev/null 2>&1
+    _t1=$(date +%s 2>/dev/null)
+    if [ -s "$NT/out" ]; then
+        echo "$_name: ok ($(wc -c < "$NT/out") bytes, ~$((_t1 - _t0))s)"
+    else
+        echo "$_name: FAIL (~$((_t1 - _t0))s)"
+    fi
+}
+KURL="$KEY_HOST/key"
+[ -n "$ABI" ] && [ -x "$ASFETCH" ] && test_engine "asfetch    $KURL" "$ASFETCH" -T 10 -o "$NT/out" "$KURL" || echo "asfetch: not available for $ABI"
+[ -n "$BB" ] && test_engine "busybox-wget" "$BB" wget -q -T 15 -O "$NT/out" "$KURL"
+command -v curl >/dev/null 2>&1 && test_engine "curl       " curl -fsSL --connect-timeout 10 --max-time 20 -o "$NT/out" "$KURL"
+command -v wget >/dev/null 2>&1 && test_engine "wget       " wget -q -T 15 -O "$NT/out" "$KURL"
+echo "last-good engine (cached): $(cat "$CFG/.kb_engine" 2>/dev/null || echo none)"
+rm -rf "$NT"; trap - EXIT INT TERM
 
 sec "autopif.log (fingerprint fetch)"
 cat "$CFG/autopif.log" 2>/dev/null | tail -40 || echo "none"
