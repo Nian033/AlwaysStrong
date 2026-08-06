@@ -1,14 +1,17 @@
 name: Upstream update
 
-# Check TEESimulator-RS / PlayIntegrityFork for a newer release. If anything
-# changed, patch the pinned versions in build.sh and open a PR.
+# Weekly check of TEESimulator-RS / PlayIntegrityFork (main) and
+# TEESimulator-RS / PlayIntegrityFix inject-s (inject) for a newer upstream
+# release. If anything moved, the pinned versions in build.sh are patched and a
+# PR is opened against that branch.
 #
-# The daily schedule is intentionally DISABLED: unauthenticated GitHub API
-# lookups from CI kept hitting rate limits (and the Fork/inject split made an
-# unattended auto-bump fragile), so it failed and emailed a red run every
-# morning. Run it by hand from the Actions tab ("Run workflow") when you want
-# to check for upstream bumps.
+# This used to fail — and email a red run — every morning: the API lookups were
+# unauthenticated, so the shared 60 req/h per-runner-IP pool ran out. They are
+# authenticated now, and a lookup that still fails is reported as a warning
+# instead of a failed job, so a flaky upstream never lands in your inbox.
 on:
+  schedule:
+    - cron: '0 6 * * 1'   # Mondays, 06:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -18,43 +21,57 @@ permissions:
 jobs:
   bump:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [main, inject]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
 
       - name: Check upstream releases
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
           ./scripts/update-upstream.sh --apply
           code=$?
-          echo "exit=$code" >> "$GITHUB_OUTPUT"
-          if [ $code -eq 0 ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          elif [ $code -eq 11 ]; then
-            echo "changed=true"  >> "$GITHUB_OUTPUT"
-          else
-            exit $code
-          fi
+          case $code in
+            0)  echo "changed=false" >> "$GITHUB_OUTPUT" ;;
+            11) echo "changed=true"  >> "$GITHUB_OUTPUT" ;;
+            *)  echo "changed=false" >> "$GITHUB_OUTPUT"
+                echo "::warning title=Upstream check failed::${{ matrix.branch }}: update-upstream.sh exited $code — skipping this run" ;;
+          esac
+          exit 0
 
       - name: Build with new pins
         if: steps.check.outputs.changed == 'true'
         run: |
-          sudo apt-get install -y zip unzip
-          ./build.sh --clean
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zip unzip
+          # committed native binaries: touch them newer than the sources so the
+          # build packages them instead of needing Rust + the NDK on the runner
+          find native -path '*/prebuilt/*' -type f -exec touch {} +
+          # only this branch's own line — the sibling branch gets its own job
+          ./build.sh --no-inject
 
       - name: Open PR
         if: steps.check.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "chore: bump upstream TEESimulator-RS / PlayIntegrityFork"
-          title: "chore: bump upstream pins"
-          branch: chore/upstream-bump
+          base: ${{ matrix.branch }}
+          branch: chore/upstream-bump-${{ matrix.branch }}
+          commit-message: "chore: bump upstream pins (${{ matrix.branch }})"
+          title: "chore: bump upstream pins (${{ matrix.branch }})"
           body: |
-            Automated upstream bump. The pinned TEESimulator-RS and/or
-            PlayIntegrityFork versions in `build.sh` have been updated to
-            whatever GitHub `/releases/latest` returns today.
+            Automated upstream bump for the `${{ matrix.branch }}` line. The
+            pinned versions in `build.sh` now match the newest upstream release,
+            **prereleases included** — TEESimulator-RS ships its freshest builds
+            that way.
 
-            Verify locally with:
+            The zip built clean on CI with the new pins. Verify locally with:
             ```
             ./build.sh --clean
             ```

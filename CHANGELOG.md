@@ -1,5 +1,21 @@
 # AlwaysStrong changelog
 
+## v1.0.3
+
+Newer TEE engine, a quieter installer, and both builds shipped from one release.
+
+**Attestation engine**
+- TEESimulator-RS bumped to `v6.0.1-307`. Upstream ships its newest builds as GitHub *prereleases*, which the update checker's `/releases/latest` lookup silently skipped — so the module sat on `v6.0.1-282` (19 Jun) while `-307` (11 Jul) was out. The checker now scans every non-draft release.
+
+**Install output**
+- Trimmed the noise: no more "default keybox installed", no "WebUI ready" (the WebUI is right there in your manager), and Zygisk just reports `zygisk found`. The KernelSU-without-Zygisk warning stays — that one silently costs you STRONG.
+
+**Releases**
+- Both builds now come out of a single `./build.sh` and ship in the same release: `AlwaysStrong-<ver>.zip` (PlayIntegrityFork, all ABIs) and `AlwaysStrong-<ver>-inject.zip` (PlayIntegrityFix inject-s, ARM only).
+
+**Credits**
+- Added KOWX712 (PlayIntegrityFix inject-s, KsuWebUIStandalone).
+
 ## v1.0.2
 
 New keybox mirror, a far more reliable fetcher, a custom-keybox file picker in the WebUI, strong-integrity fixes, and a faster, steadier Action.
