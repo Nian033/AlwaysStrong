@@ -325,7 +325,8 @@ build_variant() {
 
   # reset first: a second line must not inherit the first one's settings
   local ZIP_SUFFIX="" PIF_REPO="" PIF_TAG="" PIF_ASSET="" PIF_ASSET_FILTER=""
-  local PIF_FILES="" PIF_REQUIRED="" PIF_PATCH_PATHS="" PATCH_AUTOPIF4_WGET=0
+  local PIF_FILES="" PIF_REQUIRED="" PIF_PATCH_PATHS=""
+  local PATCH_AUTOPIF4_WGET=0 PIF_ANTITAMPER=0
   # Sourced through a CR-stripped copy: .gitattributes pins build.conf to LF,
   # but an editor or a tarball can still hand us CRLF.
   mkdir -p "$BUILD"
@@ -539,12 +540,51 @@ PY
 else
     die "need perl or python3 to binary-patch the PIF zygisk libraries"
 fi
+# Some engines' zygisk verifies module.prop against a checksum baked into the
+# upstream release and drops its payload when it disagrees — which it always
+# does, since we ship our own module.prop. The check's early-out is
+# access(<moddir>/update)==0, so the access() path is repointed at zygisk/, a
+# directory that always exists beside the .so. Same length (6 bytes), so the
+# rewrite stays in place. Enabled per line via PIF_ANTITAMPER in build.conf.
+SO_UNTAMPER() {
+    if command -v perl >/dev/null 2>&1; then
+        perl -0777 -pi -e \
+            's{/data/adb/modules/tricky_store/////update}{/data/adb/modules/tricky_store/////zygisk}g' "$1"
+    else
+        python3 - "$1" <<'PY'
+import sys
+p = sys.argv[1]
+d = open(p, 'rb').read()
+d = d.replace(b'/data/adb/modules/tricky_store/////update',
+              b'/data/adb/modules/tricky_store/////zygisk')
+open(p, 'wb').write(d)
+PY
+    fi
+}
+
 for so in "$STAGE/zygisk"/*.so; do
     [[ -f "$so" ]] || continue
     SO_PATCH "$so"
+    [[ "$PIF_ANTITAMPER" == "1" ]] && SO_UNTAMPER "$so"
     new_refs=$(grep -ac "modules/tricky_store" "$so" 2>/dev/null) || new_refs=0
     green "    $(basename "$so"): tricky_store path refs=$new_refs"
 done
+
+# The bypass is one hardcoded string away from breaking on any upstream bump,
+# and when it breaks the module still installs — it just reports itself tampered
+# and stops spoofing, with nothing in the build log to say so. Check it landed.
+if [[ "$PIF_ANTITAMPER" == "1" ]]; then
+    bold "==> Verifying the module.prop checksum check is bypassed"
+    for so in "$STAGE/zygisk"/*.so; do
+        [[ -f "$so" ]] || continue
+        if grep -aqF '/data/adb/modules/tricky_store/////update' "$so"; then
+            die "$(basename "$so"): access() path still points at /update — the bypass did not apply."
+        fi
+        grep -aqF '/data/adb/modules/tricky_store/////zygisk' "$so" \
+            || die "$(basename "$so"): no bypassed access() path found. Upstream changed the check — re-read verifyModule() and update SO_UNTAMPER before shipping, or the module reports itself tampered on device."
+        green "    $(basename "$so"): ok"
+    done
+fi
 
 # --- Hard guard: ONE module, never a stray playintegrityfix folder ---------
 # After patching, NO shipped .so or PIF helper script may point at any
