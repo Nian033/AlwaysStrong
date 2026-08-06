@@ -105,7 +105,9 @@ for z in arm64-v8a armeabi-v7a x86 x86_64; do
   fi
 done
 install_file "classes.dex" "$MODPATH"
-ui_print "PIF zygisk installed ($ZN ABIs)"
+if [ $ZN -gt 0 ]; then
+  ui_print "zygisk found"
+fi
 
 # --- aswatcher native binary (inotify target.txt + Xposed exclude + conflict)
 mkdir -p "$MODPATH/bin/$ABI_DIR"
@@ -130,11 +132,9 @@ mkdir -p "$MODPATH/webroot"
 if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "webroot/index.html"; then
   install_file "webroot/index.html" "$MODPATH/webroot"
   chmod 644 "$MODPATH/webroot/index.html"
-  if [ "$KSU" = true ] || [ "$APATCH" = true ]; then
-    ui_print "WebUI ready (open it from your manager)"
-  else
-    # Magisk has no built-in WebUI host. The standalone WebUI app is fetched
-    # from GitHub and installed on the first [Action] press (see action.sh).
+  # Magisk has no built-in WebUI host. The standalone WebUI app is fetched
+  # from GitHub and installed on the first [Action] press (see action.sh).
+  if [ "$KSU" != true ] && [ "$APATCH" != true ]; then
     ui_print "WebUI: app downloads + installs on first Action tap"
   fi
 else
@@ -147,7 +147,6 @@ if [ -f "$CONFIG_DIR/keybox.xml" ]; then
   ui_print "keybox kept ($(wc -c < "$CONFIG_DIR/keybox.xml") bytes)"
 else
   install_file "keybox.xml" "$CONFIG_DIR"
-  ui_print "default keybox installed (replace for STRONG)"
 fi
 
 # target.txt is (re)built on boot (service.sh) and on every [Action] tap — just

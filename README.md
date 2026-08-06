@@ -127,6 +127,7 @@ AlwaysStrong is combine of TEE-Simulator-RS + Play Integrity Fork
 - [Displax](https://github.com/Displax/safetynet-fix) — module boot scripts forked into PIF
 - [daboynb](https://github.com/daboynb/playcurlNEXT) — fingerprint auto-refresh approach
 - [LSPlt](https://github.com/LSPosed/LSPlt) (PLT hooks) and [ring](https://github.com/briansmith/ring) (Rust crypto)
+- [KOWX712](https://github.com/KOWX712) — PlayIntegrityFix (inject-s), used by the `-inject` build, and KsuWebUIStandalone
 
 Packaging by [@evokerr](https://t.me/evokerr).
 
