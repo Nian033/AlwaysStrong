@@ -73,7 +73,10 @@ prefer = '$prefer'
 print(rel['tag_name'])
 print(next((n for n in names if prefer and prefer in n), names[0]))
 print('prerelease' if rel['prerelease'] else 'stable')
-"
+" | tr -d '\r'
+    # ^ Windows Python writes CRLF. mapfile -t only strips the LF, so the CR rode
+    # along into the value and got baked INSIDE the quotes in build.sh
+    # (TEE_TAG_DEFAULT="v6.0.1-307<CR>"). Downloads then died on a malformed URL.
 }
 
 current_value() {
@@ -114,7 +117,7 @@ fi
 
 echo '==> Patching pinned versions'
 patch_kv() {
-    local file="$1" key="$2" val="$3"
+    local file="$1" key="$2" val="${3//$'\r'/}"
     if grep -qE "^${key}=" "$file"; then
         sed -i.bak "s|^${key}=.*|${key}=\"${val}\"|" "$file" && rm -f "$file.bak"
     fi

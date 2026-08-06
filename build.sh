@@ -30,10 +30,10 @@ set -euo pipefail
 # ---------- Configurable upstream versions ----------
 # Bump these when upstream cuts a new release.
 # Find latest via: https://api.github.com/repos/<owner>/<repo>/releases/latest
-TEE_TAG_DEFAULT="v6.0.1-307"
-TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-307-Release.zip"
-PIF_TAG_DEFAULT="v17"
-PIF_ASSET_DEFAULT="PlayIntegrityFork-v17.zip"
+TEE_TAG_DEFAULT="v6.0.1-307"
+TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-307-Release.zip"
+PIF_TAG_DEFAULT="v17"
+PIF_ASSET_DEFAULT="PlayIntegrityFork-v17.zip"
 
 TEE_TAG="$TEE_TAG_DEFAULT"
 TEE_ASSET="$TEE_ASSET_DEFAULT"
@@ -63,6 +63,14 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown flag: $1" >&2; exit 1 ;;
     esac
 done
+
+# A stray CR in a pin turns the download URL into "…/v6.0.1-307<CR>/…", which
+# curl rejects as malformed — and it is invisible in the build log, since the CR
+# just returns the cursor. Strip it rather than debug it again.
+TEE_TAG="${TEE_TAG//$'\r'/}"
+TEE_ASSET="${TEE_ASSET//$'\r'/}"
+PIF_TAG="${PIF_TAG//$'\r'/}"
+PIF_ASSET="${PIF_ASSET//$'\r'/}"
 
 # ---------- Paths ----------
 ROOT="$(cd "$(dirname "$0")" && pwd)"
