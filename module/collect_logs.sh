@@ -129,10 +129,12 @@ test_engine() {
     fi
 }
 KURL="$KEY_HOST/key"
-[ -n "$ABI" ] && [ -x "$ASFETCH" ] && test_engine "asfetch    $KURL" "$ASFETCH" -T 10 -o "$NT/out" "$KURL" || echo "asfetch: not available for $ABI"
-[ -n "$BB" ] && test_engine "busybox-wget" "$BB" wget -q -T 15 -O "$NT/out" "$KURL"
-command -v curl >/dev/null 2>&1 && test_engine "curl       " curl -fsSL --connect-timeout 10 --max-time 20 -o "$NT/out" "$KURL"
-command -v wget >/dev/null 2>&1 && test_engine "wget       " wget -q -T 15 -O "$NT/out" "$KURL"
+# short timeouts: this is a reachability probe, not the real fetch, and long
+# per-engine stalls are what made pressing the button feel like a freeze.
+[ -n "$ABI" ] && [ -x "$ASFETCH" ] && test_engine "asfetch    $KURL" "$ASFETCH" -T 5 -o "$NT/out" "$KURL" || echo "asfetch: not available for $ABI"
+[ -n "$BB" ] && test_engine "busybox-wget" "$BB" wget -q -T 5 -O "$NT/out" "$KURL"
+command -v curl >/dev/null 2>&1 && test_engine "curl       " curl -fsSL --connect-timeout 5 --max-time 8 -o "$NT/out" "$KURL"
+command -v wget >/dev/null 2>&1 && test_engine "wget       " wget -q -T 5 -O "$NT/out" "$KURL"
 echo "last-good engine (cached): $(cat "$CFG/.kb_engine" 2>/dev/null || echo none)"
 rm -rf "$NT"; trap - EXIT INT TERM
 
@@ -146,7 +148,9 @@ for c in playintegrityfix playintegrityfork tricky_store_v2 TrickyStore \
 done
 
 sec "logcat (our tags, last 200 lines)"
-logcat -d 2>/dev/null | grep -iE 'AlwaysStrong|TEESimulator|tricky_store|aswatcher|libinject|PlayIntegrity' | tail -200 || echo "logcat unavailable"
+# -t 3000 reads only the tail of the ring buffer; a full `logcat -d` dump can be
+# tens of MB and takes seconds, which is most of the button's perceived lag.
+logcat -d -t 3000 2>/dev/null | grep -iE 'AlwaysStrong|TEESimulator|tricky_store|aswatcher|libinject|PlayIntegrity' | tail -200 || echo "logcat unavailable"
 
 sec "dmesg (our tags)"
 dmesg 2>/dev/null | grep -iE 'TEESimulator|tricky_store|aswatcher' | tail -40 || echo "dmesg unavailable"
@@ -156,4 +160,7 @@ echo "===== end ====="
 } > "$OUT" 2>&1
 
 chmod 664 "$OUT" 2>/dev/null
+# leave a pointer to the newest log so the WebUI can launch this detached (no UI
+# freeze) and poll for the path instead of waiting on the whole run.
+echo "$OUT" > "$CFG/.last_log" 2>/dev/null
 echo "$OUT"
