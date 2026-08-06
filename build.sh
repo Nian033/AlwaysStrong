@@ -10,6 +10,14 @@
 #   ./build.sh --tee-file PATH  # use a LOCAL TEESimulator-RS zip (e.g. a CI build) — skip download
 #   ./build.sh --pif-file PATH  # use a LOCAL PlayIntegrityFork zip (e.g. a CI build) — skip download
 #   ./build.sh --clean          # wipe build/ first
+#   ./build.sh --no-inject      # only the default Fork zip, skip the -inject one
+#   ./build.sh --inject-ref REF # build the -inject zip from another ref (default: inject)
+#
+# Every run produces BOTH release lines:
+#   out/AlwaysStrong-<ver>.zip         PlayIntegrityFork  (default build, all ABIs)
+#   out/AlwaysStrong-<ver>-inject.zip  PlayIntegrityFix inject-s (ARM only)
+# The inject line lives on the `inject` branch — its module scripts and PIF
+# engine differ — so it is built from a throwaway checkout of that ref.
 #
 # CI / nightly builds live as GitHub Actions artifacts, not release assets, so
 # fetch them yourself (e.g. `gh run download -R osm0sis/PlayIntegrityFork -D ci`)
@@ -22,10 +30,10 @@ set -euo pipefail
 # ---------- Configurable upstream versions ----------
 # Bump these when upstream cuts a new release.
 # Find latest via: https://api.github.com/repos/<owner>/<repo>/releases/latest
-TEE_TAG_DEFAULT="v6.0.1-282"
-TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-282-Release.zip"
-PIF_TAG_DEFAULT="v17"
-PIF_ASSET_DEFAULT="PlayIntegrityFork-v17.zip"
+TEE_TAG_DEFAULT="v6.0.1-307"
+TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-307-Release.zip"
+PIF_TAG_DEFAULT="v17"
+PIF_ASSET_DEFAULT="PlayIntegrityFork-v17.zip"
 
 TEE_TAG="$TEE_TAG_DEFAULT"
 TEE_ASSET="$TEE_ASSET_DEFAULT"
@@ -34,6 +42,8 @@ PIF_ASSET="$PIF_ASSET_DEFAULT"
 DO_CLEAN=0
 TEE_FILE=""
 PIF_FILE=""
+DO_INJECT=1
+INJECT_REF="${INJECT_REF:-inject}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -44,6 +54,8 @@ while [[ $# -gt 0 ]]; do
         --tee-file)   TEE_FILE="$2"; shift 2 ;;
         --pif-file)   PIF_FILE="$2"; shift 2 ;;
         --clean)      DO_CLEAN=1; shift ;;
+        --no-inject)  DO_INJECT=0; shift ;;
+        --inject-ref) INJECT_REF="$2"; shift 2 ;;
         -h|--help)
             sed -n '2,/^$/p' "$0"
             exit 0
@@ -70,7 +82,6 @@ die()    { red "ERROR: $*"; exit 1; }
 # ---------- Tool checks ----------
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
 need unzip
-need zip
 if command -v curl >/dev/null 2>&1; then
     FETCH="curl -fL --retry 3 --connect-timeout 15 -o"
 elif command -v wget >/dev/null 2>&1; then
@@ -94,6 +105,39 @@ if [[ $DO_CLEAN -eq 1 ]]; then
 fi
 
 mkdir -p "$STAGE" "$DL" "$OUT"
+
+# ---------- zip (or a 7-Zip stand-in) ----------
+# Git-Bash / MSYS boxes ship 7-Zip but no Info-ZIP `zip`, which used to stop the
+# build dead at the packaging step. Drop a tiny shim on PATH instead — it also
+# reaches the -inject sub-build, which runs its own copy of this script.
+if ! command -v zip >/dev/null 2>&1; then
+    SEVENZ=""
+    for c in 7z 7za "/c/Program Files/7-Zip/7z.exe" "/c/Program Files (x86)/7-Zip/7z.exe"; do
+        if command -v "$c" >/dev/null 2>&1 || [[ -x "$c" ]]; then SEVENZ="$c"; break; fi
+    done
+    [[ -n "$SEVENZ" ]] || die "missing required tool: zip (install Info-ZIP, or 7-Zip and re-run)"
+    mkdir -p "$BUILD/shim"
+    cat > "$BUILD/shim/zip" <<EOF
+#!/usr/bin/env bash
+# Info-ZIP stand-in backed by 7-Zip. Covers exactly what build.sh calls:
+#   zip -qr <out.zip> <path...> [-x <pattern>...]
+set -euo pipefail
+out=""; paths=()
+while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+        -x) shift 2 ;;
+        -*) shift ;;
+        *)  if [[ -z "\$out" ]]; then out="\$1"; else paths+=("\$1"); fi; shift ;;
+    esac
+done
+[[ -n "\$out" ]] || { echo "zip-shim: no output file" >&2; exit 1; }
+command -v cygpath >/dev/null 2>&1 && out="\$(cygpath -w "\$out")"
+exec "$SEVENZ" a -tzip -bso0 -bsp0 "-xr!.DS_Store" "\$out" "\${paths[@]}"
+EOF
+    chmod 755 "$BUILD/shim/zip"
+    export PATH="$BUILD/shim:$PATH"
+    yellow "    zip not found — packaging with 7-Zip ($SEVENZ)"
+fi
 
 # ---------- Download ----------
 tee_zip="$DL/$TEE_ASSET"
@@ -448,13 +492,52 @@ rm -f "$OUT_ZIP"
 bold "==> Packaging $OUT_ZIP"
 ( cd "$STAGE" && zip -qr "$OUT_ZIP" . -x "*.DS_Store" )
 
+# ---------- Second release line: the -inject variant ----------
+# The inject-s build is a different PIF engine with its own module scripts, so
+# it lives on the `inject` branch. Export that ref into build/inject-src and run
+# its own build.sh with ZIP_SUFFIX=-inject, so a single ./build.sh emits both
+# zips. No flags are forwarded: --tee/--pif pins belong to one line only, and
+# the export is fresh every run, so --clean has nothing to wipe there.
+INJECT_ZIP=""
+if [[ $DO_INJECT -eq 1 && -z "${AS_VARIANT_BUILD:-}" ]]; then
+    if ! command -v git >/dev/null 2>&1 \
+       || ! git -C "$ROOT" rev-parse --verify -q "${INJECT_REF}^{commit}" >/dev/null 2>&1; then
+        yellow ""
+        yellow "  skipping the -inject build: ref '$INJECT_REF' not found"
+        yellow "  (fetch it with: git fetch origin inject:inject, or pass --no-inject)"
+    else
+        bold ""
+        bold "==> Building the -inject line from '$INJECT_REF'"
+        INJECT_SRC="$BUILD/inject-src"
+        rm -rf "$INJECT_SRC"
+        mkdir -p "$INJECT_SRC"
+        git -C "$ROOT" archive "$INJECT_REF" | tar -x -C "$INJECT_SRC" \
+            || die "could not export '$INJECT_REF'"
+        # share the download cache — the TEE zip is identical on both lines
+        mkdir -p "$INJECT_SRC/build/downloads"
+        cp -n "$DL"/*.zip "$INJECT_SRC/build/downloads/" 2>/dev/null || true
+        AS_VARIANT_BUILD=1 ZIP_SUFFIX="-inject" bash "$INJECT_SRC/build.sh" \
+            || die "the -inject build failed (run it alone: cd $INJECT_SRC && ZIP_SUFFIX=-inject ./build.sh)"
+        INJECT_ZIP=$(ls -1 "$INJECT_SRC"/out/AlwaysStrong-*-inject.zip 2>/dev/null | head -1)
+        [[ -n "$INJECT_ZIP" ]] || die "the -inject build produced no zip"
+        cp "$INJECT_ZIP" "$OUT/"
+        INJECT_ZIP="$OUT/$(basename "$INJECT_ZIP")"
+    fi
+fi
+
 # ---------- Summary ----------
-SIZE=$(du -h "$OUT_ZIP" | cut -f1)
+summarize() {
+    local zip="$1"
+    green "  Built: $(basename "$zip")  ($(du -h "$zip" | cut -f1))"
+    green "  Path:  $zip"
+    if [[ -n "$SHA" ]]; then
+        green "  SHA256: $($SHA "$zip" | awk '{print $1}')"
+    fi
+}
 green ""
-green "  Built: $(basename "$OUT_ZIP")  ($SIZE)"
-green "  Path:  $OUT_ZIP"
-if [[ -n "$SHA" ]]; then
-    HASH=$($SHA "$OUT_ZIP" | awk '{print $1}')
-    green "  SHA256: $HASH"
+summarize "$OUT_ZIP"
+if [[ -n "$INJECT_ZIP" ]]; then
+    green ""
+    summarize "$INJECT_ZIP"
 fi
 green ""

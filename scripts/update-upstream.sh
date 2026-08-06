@@ -5,6 +5,14 @@
 #   scripts/update-upstream.sh            # dry-run, print whether anything is newer
 #   scripts/update-upstream.sh --apply    # bump build.sh pinned tags to latest
 #   scripts/update-upstream.sh --apply --build   # also re-run build.sh after patching
+#   scripts/update-upstream.sh --stable-only     # ignore prereleases
+#
+# Prereleases COUNT by default. TEESimulator-RS ships its newest builds as
+# prereleases (the "CI build" posted in the channel) — /releases/latest hides
+# those, which is why this used to report "up to date" against a newer upstream.
+#
+# Set GH_TOKEN (or GITHUB_TOKEN) to authenticate the API calls: unauthenticated
+# CI runners share a 60 req/h pool per IP and were getting rate-limited.
 #
 # Exit codes:
 #   0  nothing to update
@@ -16,10 +24,12 @@ set -euo pipefail
 
 APPLY=0
 DO_BUILD=0
+ALLOW_PRE=1
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --apply) APPLY=1; shift ;;
         --build) DO_BUILD=1; shift ;;
+        --stable-only) ALLOW_PRE=0; shift ;;
         -h|--help) sed -n '2,/^$/p' "$0"; exit 0 ;;
         *) echo "unknown flag: $1" >&2; exit 1 ;;
     esac
@@ -30,23 +40,39 @@ BUILD_SH="$ROOT/build.sh"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }
 need curl
-need python3
+if command -v python3 >/dev/null 2>&1; then PY=python3
+elif command -v python >/dev/null 2>&1; then PY=python
+else echo "missing: python3" >&2; exit 1
+fi
+
+TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+CURL_AUTH=()
+[[ -n "$TOKEN" ]] && CURL_AUTH=(-H "Authorization: Bearer $TOKEN")
 
 api_latest() {
-    # Pull tag_name and the asset name we care about. PIF ships one .zip per release;
-    # TEE ships Debug + Release — we always pick the Release one.
+    # Newest release (prereleases included unless --stable-only) plus the asset
+    # name we care about. PIF ships one .zip per release; TEE ships Debug +
+    # Release — we always pick the Release one. Drafts are always skipped.
     local repo="$1" prefer="$2"
-    curl -sSL -H 'Accept: application/vnd.github+json' \
-        "https://api.github.com/repos/${repo}/releases/latest" \
-    | python3 -c "
+    curl -sSL --retry 2 --max-time 30 "${CURL_AUTH[@]}" \
+        -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/${repo}/releases?per_page=20" \
+    | "$PY" -c "
 import json, sys
-d = json.load(sys.stdin)
-tag = d['tag_name']
-names = [a['name'] for a in d.get('assets', []) if a['name'].endswith('.zip')]
+raw = json.load(sys.stdin)
+if isinstance(raw, dict):                       # rate limit / 404 -> {'message': ...}
+    sys.exit('github api: ' + raw.get('message', 'unexpected response'))
+allow_pre = '$ALLOW_PRE' == '1'
+rels = [r for r in raw if not r['draft'] and (allow_pre or not r['prerelease'])]
+rels = [r for r in rels if any(a['name'].endswith('.zip') for a in r.get('assets', []))]
+if not rels:
+    sys.exit('no release with a .zip asset in ${repo}')
+rel = max(rels, key=lambda r: r['published_at'])
+names = [a['name'] for a in rel['assets'] if a['name'].endswith('.zip')]
 prefer = '$prefer'
-pick = next((n for n in names if prefer and prefer in n), names[0] if names else '')
-print(tag)
-print(pick)
+print(rel['tag_name'])
+print(next((n for n in names if prefer and prefer in n), names[0]))
+print('prerelease' if rel['prerelease'] else 'stable')
 "
 }
 
@@ -58,8 +84,8 @@ echo '==> Querying upstream GitHub releases'
 mapfile -t TEE < <(api_latest "Enginex0/TEESimulator-RS" "Release")
 mapfile -t PIF < <(api_latest "osm0sis/PlayIntegrityFork" "")
 
-TEE_TAG_NEW="${TEE[0]}"; TEE_ASSET_NEW="${TEE[1]}"
-PIF_TAG_NEW="${PIF[0]}"; PIF_ASSET_NEW="${PIF[1]}"
+TEE_TAG_NEW="${TEE[0]}"; TEE_ASSET_NEW="${TEE[1]}"; TEE_KIND="${TEE[2]:-}"
+PIF_TAG_NEW="${PIF[0]}"; PIF_ASSET_NEW="${PIF[1]}"; PIF_KIND="${PIF[2]:-}"
 
 [[ -n "$TEE_TAG_NEW" && -n "$TEE_ASSET_NEW" ]] || { echo "TEE lookup failed" >&2; exit 1; }
 [[ -n "$PIF_TAG_NEW" && -n "$PIF_ASSET_NEW" ]] || { echo "PIF lookup failed" >&2; exit 1; }
@@ -69,8 +95,8 @@ TEE_ASSET_CUR=$(current_value TEE_ASSET_DEFAULT)
 PIF_TAG_CUR=$(current_value PIF_TAG_DEFAULT)
 PIF_ASSET_CUR=$(current_value PIF_ASSET_DEFAULT)
 
-echo "    TEE: $TEE_TAG_CUR  ->  $TEE_TAG_NEW   ($TEE_ASSET_NEW)"
-echo "    PIF: $PIF_TAG_CUR  ->  $PIF_TAG_NEW   ($PIF_ASSET_NEW)"
+echo "    TEE: $TEE_TAG_CUR  ->  $TEE_TAG_NEW   ($TEE_ASSET_NEW, $TEE_KIND)"
+echo "    PIF: $PIF_TAG_CUR  ->  $PIF_TAG_NEW   ($PIF_ASSET_NEW, $PIF_KIND)"
 
 CHANGED=0
 [[ "$TEE_TAG_CUR" != "$TEE_TAG_NEW" || "$TEE_ASSET_CUR" != "$TEE_ASSET_NEW" ]] && CHANGED=1
