@@ -220,12 +220,28 @@ find_ndk() {
     return 1
 }
 
-if watcher_needs_build; then
-    bold "==> Building native watcher (Rust, 4 ABIs)"
+# Every prebuilt present, but no Rust toolchain? Ship the committed binaries and
+# say so, instead of failing the whole build. A git checkout rewrites mtimes, so
+# "sources are newer" is usually just checkout order, not an actual code change.
+have_all_prebuilts() {
+    local dir="$1" name="$2"; shift 2
+    local abi
+    for abi in "$@"; do [[ -f "$dir/$abi/$name" ]] || return 1; done
+    return 0
+}
+toolchain_ready() {
     if ! command -v cargo >/dev/null 2>&1 && [[ -f "$HOME/.cargo/env" ]]; then
         # shellcheck disable=SC1091
         source "$HOME/.cargo/env"
     fi
+    command -v cargo >/dev/null 2>&1 && command -v cargo-ndk >/dev/null 2>&1 && find_ndk
+}
+
+if watcher_needs_build && ! toolchain_ready \
+   && have_all_prebuilts "$WATCHER_PREBUILT" aswatcher "${WATCHER_ABIS[@]}"; then
+    yellow "    no Rust/NDK toolchain — shipping the committed aswatcher prebuilts"
+elif watcher_needs_build; then
+    bold "==> Building native watcher (Rust, 4 ABIs)"
     if ! command -v cargo >/dev/null 2>&1; then
         die "cargo not found. Install Rust: https://rustup.rs (then: rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android)"
     fi
@@ -266,12 +282,11 @@ asfetch_needs_build() {
     awk -v s="$newest_src" -v b="$oldest_bin" 'BEGIN{exit !(s>b)}'
 }
 
-if asfetch_needs_build; then
+if asfetch_needs_build && ! toolchain_ready \
+   && have_all_prebuilts "$ASFETCH_PREBUILT" asfetch "${ASFETCH_ABIS[@]}"; then
+    yellow "    no Rust/NDK toolchain — shipping the committed asfetch prebuilts"
+elif asfetch_needs_build; then
     bold "==> Building native fetcher (Rust + rustls, 4 ABIs)"
-    if ! command -v cargo >/dev/null 2>&1 && [[ -f "$HOME/.cargo/env" ]]; then
-        # shellcheck disable=SC1091
-        source "$HOME/.cargo/env"
-    fi
     command -v cargo    >/dev/null 2>&1 || die "cargo not found. Install Rust: https://rustup.rs"
     command -v cargo-ndk >/dev/null 2>&1 || die "cargo-ndk not found. Install: cargo install cargo-ndk"
     find_ndk || die "Android NDK not found. Set ANDROID_NDK_HOME or install via Android Studio (SDK Manager -> NDK)"
