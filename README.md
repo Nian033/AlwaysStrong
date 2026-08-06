@@ -75,9 +75,9 @@ The first Action tap fetches a working keybox and a fresh Pixel fingerprint and 
 Each release ships two builds:
 
 - **`AlwaysStrong-<version>.zip`** — the default, and what [Releases](https://github.com/evoker0/AlwaysStrong/releases/latest) points to. Built on PlayIntegrityFork; covers arm64-v8a, armeabi-v7a, x86 and x86_64.
-- **`AlwaysStrong-<version>-inject.zip`** — arm64-v8a and armeabi-v7a only, built on PlayIntegrityFix (inject-s). A different spoof engine for ARM devices; try it if the default doesn't reach `STRONG` on yours.
+- **`AlwaysStrong-<version>-inject.zip`** — built on PlayIntegrityFix (inject-s). A different spoof engine; try it if the default doesn't reach `STRONG` on your device.
 
-On x86 / x86_64 use the default build — the inject build has no x86 zygisk. Each build updates within its own line, so switching between them means flashing the other zip.
+Both install on all four ABIs. On x86 / x86_64 prefer the default build: PlayIntegrityFix inject-s builds no x86 zygisk, so the inject zip installs and runs its attestation half there but cannot spoof Play Integrity (it tells you at install time). Each build updates within its own line, so switching between them means flashing the other zip.
 
 
 ## Configuration

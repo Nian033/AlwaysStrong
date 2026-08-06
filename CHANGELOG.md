@@ -11,7 +11,10 @@ Newer TEE engine, a quieter installer, and both builds shipped from one release.
 - Trimmed the noise: no more "default keybox installed", no "WebUI ready" (the WebUI is right there in your manager), and Zygisk just reports `zygisk found`. The KernelSU-without-Zygisk warning stays — that one silently costs you STRONG.
 
 **Releases**
-- Both builds now come out of a single `./build.sh` and ship in the same release: `AlwaysStrong-<ver>.zip` (PlayIntegrityFork, all ABIs) and `AlwaysStrong-<ver>-inject.zip` (PlayIntegrityFix inject-s, ARM only).
+- Both builds now come out of a single `./build.sh` and ship in the same release: `AlwaysStrong-<ver>.zip` (PlayIntegrityFork) and `AlwaysStrong-<ver>-inject.zip` (PlayIntegrityFix inject-s).
+
+**Architectures**
+- The `-inject` build installs on x86 / x86_64 instead of aborting, and now carries x86 TEE libraries and watcher. Its Play Integrity spoof is still ARM-only — PlayIntegrityFix inject-s builds no x86 zygisk — so on x86 the installer says so and points at the default build.
 
 **Credits**
 - Added KOWX712 (PlayIntegrityFix inject-s, KsuWebUIStandalone).
