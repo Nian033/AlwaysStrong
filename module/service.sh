@@ -79,10 +79,13 @@ for LP in vendor.camera.aux.packagelist persist.vendor.camera.privapp.list; do
             ;;
     esac
 done
-if [ -n "$(getprop init.svc.vendor.lineage_health 2>/dev/null)" ]; then
-    stop vendor.lineage_health 2>/dev/null
-    resetprop --delete init.svc.vendor.lineage_health 2>/dev/null
-fi
+# Lineage Health HAL: the tell is the property NAME (it carries "lineage"), not
+# the running service. Charging control reaches the HAL over binder
+# (vendor.lineage.health.IChargingControl) and never reads init.svc.*, so
+# dropping the prop hides the ROM marker while charge limiting keeps working.
+# We used to `stop` the service too (inherited from specter) — that killed the
+# feature for no gain. See issue #7.
+resetprop --delete init.svc.vendor.lineage_health 2>/dev/null
 }&
 
 # --- Conflict re-scan on every boot ---
