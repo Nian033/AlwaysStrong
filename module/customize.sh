@@ -29,8 +29,9 @@ ui_print "${NAME:-AlwaysStrong} $VERSION"
 ui_print "by @evokerr  -  t.me/keyboxstrong"
 ui_print ""
 
-# stop anything that might be holding our lib files (upgrade-in-place)
-for proc in TEESimulator supervisor daemon ta-enhanced; do
+# stop anything that might be holding our lib files (upgrade-in-place). The
+# list is a superset across both engines — killing an absent process is a no-op.
+for proc in TEESimulator supervisor daemon ta-enhanced TrickyStore; do
   for pid in $(pidof "$proc" 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
@@ -86,23 +87,14 @@ if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "^.*banner\.png"; then
   chmod 644 "$MODPATH/banner.png" 2>/dev/null
 fi
 
-# --- TEESim binaries ------------------------------------------------------
-install_file "lib/$ABI_DIR/libTEESimulator.so" "$MODPATH"
-install_file "lib/$ABI_DIR/libinject.so"       "$MODPATH"
-install_file "lib/$ABI_DIR/libsupervisor.so"   "$MODPATH"
-HAS_CERTGEN=0
-if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "lib/$ABI_DIR/libcertgen.so"; then
-  install_file "lib/$ABI_DIR/libcertgen.so" "$MODPATH"
-  HAS_CERTGEN=1
-fi
-mv "$MODPATH/libinject.so"     "$MODPATH/inject"
-mv "$MODPATH/libsupervisor.so" "$MODPATH/supervisor"
-install_file "tee_classes.dex" "$MODPATH"
-if [ $HAS_CERTGEN -eq 1 ]; then
-  ui_print "TEESim installed ($ABI_DIR, native certgen)"
-else
-  ui_print "TEESim installed ($ABI_DIR)"
-fi
+# --- attestation engine (TEESimulator-RS | TrickyStore) -------------------
+# The per-engine install steps live in attest.sh, which build.sh generates from
+# attest/<engine>.sh. It runs with $ABI_DIR / $ARCH / $ZIPFILE / $MODPATH and
+# install_file() + ui_print() in scope, and installs that engine's binaries.
+install_file "attest.sh" "$MODPATH"
+# shellcheck source=/dev/null
+. "$MODPATH/attest.sh"
+attest_install
 
 # --- PIF zygisk + dex ----------------------------------------------------
 # Ship whatever ABIs upstream built. PlayIntegrityFork covers all four;

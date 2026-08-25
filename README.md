@@ -120,7 +120,18 @@ Every run produces both lines:
 - `out/AlwaysStrong-<version>.zip` — the default build (PlayIntegrityFork)
 - `out/AlwaysStrong-<version>-inject.zip` — the PlayIntegrityFix inject-s build
 
-Both are built from this one tree — there is no second branch:
+### Other keystore engines (self-build only)
+
+Releases only ever ship the TEESimulator-RS build. The keystore layer can instead be swapped for [TrickyStore](https://github.com/5ec1cff/TrickyStore) or the open-source [TrickyStoreOSS](https://github.com/beakthoven/TrickyStoreOSS) — these are never published, so build one yourself by pointing `build.sh` at the upstream release ZIP:
+
+```bash
+./build.sh --engine trickystore    --ts-file    Tricky-Store-v1.4.1-...-release.zip
+./build.sh --engine trickystoreoss --tsoss-file Tricky-Store-OSS-v3.0.0-...-Release.zip
+```
+
+The output ZIP gets a `-TS` / `-TSOSS` suffix; drop `--*-file` to auto-download the pinned release. All three engines read the same `/data/adb/tricky_store/` config, so the scripts and WebUI are unchanged.
+
+Both default lines are built from this one tree — there is no second branch:
 
 ```
 module/                                 everything the two lines share

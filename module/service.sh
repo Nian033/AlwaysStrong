@@ -23,6 +23,40 @@ else
     ENGINE=none
 fi
 
+# --- Attestation engine adapter (TEESimulator-RS | TrickyStore) -----------
+# build.sh overlays exactly one attest.sh; the daemon start/liveness below go
+# through it. Fall back to the TEESimulator pattern if it is somehow missing.
+if [ -f "$MODDIR/attest.sh" ]; then
+    . "$MODDIR/attest.sh"
+else
+    attest_early() { return 1; }
+    attest_start() { "$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" & }
+    attest_alive() { pidof TEESimulator >/dev/null 2>&1 || pidof daemon >/dev/null 2>&1; }
+fi
+
+# Engines that hijack keystore2 (TrickyStore) must start at the service stage,
+# before sys.boot_completed — a late start misses the injection window and the
+# daemon crash-loops with EBADF. Engines that don't (TEESimulator) return false
+# here and are started after the boot-completed wait below.
+#
+# TrickyStore reads the verified-boot state when building the attestation
+# rootOfTrust. The lock-state props are otherwise only asserted in the late
+# block below (after boot_completed), so an early start could read the raw
+# ORANGE/unlocked values. Pin the rootOfTrust-relevant props here first so the
+# daemon reads green/locked; the late block re-asserts them for OEMs that reset
+# them during boot.
+if attest_early 2>/dev/null; then
+    resetprop_if_diff ro.boot.verifiedbootstate green
+    resetprop_if_diff vendor.boot.verifiedbootstate green
+    resetprop_if_diff ro.boot.vbmeta.device_state locked
+    resetprop_if_diff vendor.boot.vbmeta.device_state locked
+    resetprop_if_diff ro.boot.flash.locked 1
+    resetprop_if_diff ro.secureboot.lockstate locked
+    resetprop_if_diff ro.boot.veritymode enforcing
+    resetprop_if_diff vendor.boot.veritymode enforcing
+    attest_start
+fi
+
 # --- Recovery mode guard ---
 resetprop_if_match ro.boot.mode recovery unknown
 resetprop_if_match ro.bootmode recovery unknown
@@ -102,7 +136,9 @@ fi
 # --- Wait for boot, then start TEE simulator ---
 while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done
 
-# Kill any stale TEE / aswatcher processes from a previous boot
+# Kill any stale TEE / aswatcher processes from a previous boot. TrickyStore is
+# NOT in this list: when its engine is active it was already started early
+# (above), so killing it here would nuke the live daemon.
 for proc in TEESimulator supervisor daemon aswatcher; do
   for pid in $(pidof "$proc" 2>/dev/null); do
     kill -9 "$pid" 2>/dev/null
@@ -110,8 +146,11 @@ for proc in TEESimulator supervisor daemon aswatcher; do
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
 
-# Fork-based supervisor + daemon (TEESimulator-RS standard pattern)
-"$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
+# Start the attestation engine here only if it did NOT want the early start
+# (TEESimulator). TrickyStore is already running from the early start above.
+if ! attest_early 2>/dev/null; then
+    attest_start
+fi
 
 # --- aswatcher native daemon (inotify target.txt + Xposed + conflict) ---
 case "$(uname -m)" in
@@ -188,9 +227,9 @@ fi
 {
     while true; do
         sleep 120
-        if ! pidof TEESimulator >/dev/null 2>&1 && ! pidof daemon >/dev/null 2>&1; then
-            log -t "AlwaysStrong" "TEE daemon died, restarting..."
-            "$MODDIR/supervisor" "$MODDIR/daemon" "$MODDIR" &
+        if ! attest_alive; then
+            log -t "AlwaysStrong" "attestation daemon died, restarting..."
+            attest_start
         fi
         if [ -x "$AS_BIN" ] && ! pidof aswatcher >/dev/null 2>&1; then
             log -t "AlwaysStrong" "aswatcher died, restarting..."

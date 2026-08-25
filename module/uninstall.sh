@@ -4,14 +4,15 @@
 MODDIR=${0%/*}
 CONFIG_DIR=/data/adb/tricky_store
 
-# Kill all running module processes
-for proc in TEESimulator supervisor daemon; do
+# Kill all running module processes (both attestation engines)
+for proc in TEESimulator supervisor daemon TrickyStore; do
     for pid in $(pidof "$proc" 2>/dev/null); do
         kill -9 "$pid" 2>/dev/null
     done
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
 pkill -9 -f org.matrix.TEESimulator 2>/dev/null || true
+pkill -9 -f io.github.a13e300.tricky_store 2>/dev/null || true
 
 # Kill GMS + Vending so they reload without our hooks
 killall -9 com.google.android.gms.unstable 2>/dev/null
