@@ -31,7 +31,7 @@ ui_print ""
 
 # stop anything that might be holding our lib files (upgrade-in-place). The
 # list is a superset across both engines — killing an absent process is a no-op.
-for proc in TEESimulator supervisor daemon ta-enhanced TrickyStore; do
+for proc in TEESimulator supervisor daemon ta-enhanced TrickyStoreOSS; do
   for pid in $(pidof "$proc" 2>/dev/null); do kill -9 "$pid" 2>/dev/null; done
 done
 pkill -9 -f TEESimulator 2>/dev/null || true
@@ -87,7 +87,7 @@ if unzip -l "$ZIPFILE" 2>/dev/null | grep -q "^.*banner\.png"; then
   chmod 644 "$MODPATH/banner.png" 2>/dev/null
 fi
 
-# --- attestation engine (TEESimulator-RS | TrickyStore) -------------------
+# --- attestation engine (TEESimulator-RS | TrickyStoreOSS) ----------------
 # The per-engine install steps live in attest.sh, which build.sh generates from
 # attest/<engine>.sh. It runs with $ABI_DIR / $ARCH / $ZIPFILE / $MODPATH and
 # install_file() + ui_print() in scope, and installs that engine's binaries.

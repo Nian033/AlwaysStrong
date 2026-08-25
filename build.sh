@@ -11,45 +11,38 @@
 #   module-variants/<line>/ship/                 files overlaid into the module
 #
 # Two orthogonal axes:
-#   --variant  fork | inject                          the Play Integrity line
-#   --engine   tee | trickystore | trickystoreoss     the attestation backend
-#                                   (keystore). Default tee. All read
-#                                   /data/adb/tricky_store/, so the shared
-#                                   scripts/WebUI are engine-neutral.
+#   --variant  fork | inject             the Play Integrity line
+#   --engine   tee | trickystoreoss      the attestation backend (keystore).
+#                                   Default tee. Both read /data/adb/tricky_store/,
+#                                   so the shared scripts/WebUI are engine-neutral.
 #
 # Attestation engines:
 #   tee             TEESimulator-RS (software TEE; leaf-hack works for every app)
-#   trickystore     TrickyStore, 5ec1cff fork (obfuscated injectors, anti-tamper)
 #   trickystoreoss  TrickyStoreOSS, beakthoven (open source; classes.dex + libinject.so)
 #
 # Usage:
 #   ./build.sh                              # both lines, TEESimulator engine
 #   ./build.sh --variant fork               # only the default (PlayIntegrityFork) line
 #   ./build.sh --variant inject             # only the PlayIntegrityFix inject-s line
-#   ./build.sh --engine trickystore         # both lines, TrickyStore engine (-TS)
 #   ./build.sh --engine trickystoreoss      # both lines, TrickyStoreOSS engine (-TSOSS)
 #   ./build.sh --variant fork --engine trickystoreoss  # fork line + TrickyStoreOSS
 #   ./build.sh --tee v6.0.0                 # override the TEESimulator-RS release tag
 #   ./build.sh --tee-file PATH              # use a LOCAL TEESimulator-RS zip, skip the download
-#   ./build.sh --ts 1.4.1                   # override the TrickyStore release tag
-#   ./build.sh --ts-file PATH               # use a LOCAL TrickyStore zip, skip the download
 #   ./build.sh --tsoss v3.0.0               # override the TrickyStoreOSS release tag
 #   ./build.sh --tsoss-file PATH            # use a LOCAL TrickyStoreOSS zip, skip the download
 #   ./build.sh --pif v16                    # override the PIF tag  (needs --variant)
 #   ./build.sh --pif-file PATH              # use a LOCAL PIF zip   (needs --variant)
 #   ./build.sh --clean                      # wipe build/ first
 #
-# Output (the engine suffix marks a non-TEE build):
+# Output (the -TSOSS suffix marks a TrickyStoreOSS build):
 #   out/AlwaysStrong-<ver>.zip               PlayIntegrityFork          + TEESimulator
 #   out/AlwaysStrong-<ver>-inject.zip        PlayIntegrityFix inject-s  + TEESimulator
-#   out/AlwaysStrong-<ver>-TS.zip            PlayIntegrityFork          + TrickyStore
-#   out/AlwaysStrong-<ver>-inject-TS.zip     PlayIntegrityFix inject-s  + TrickyStore
 #   out/AlwaysStrong-<ver>-TSOSS.zip         PlayIntegrityFork          + TrickyStoreOSS
 #   out/AlwaysStrong-<ver>-inject-TSOSS.zip  PlayIntegrityFix inject-s  + TrickyStoreOSS
 #
 # CI / nightly builds live as GitHub Actions artifacts, not release assets, so
 # fetch them yourself (e.g. `gh run download -R osm0sis/PlayIntegrityFork -D ci`)
-# and point --pif-file / --tee-file / --ts-file / --tsoss-file at the module zip.
+# and point --pif-file / --tee-file / --tsoss-file at the resulting module zip.
 #
 # Requires: bash, curl OR wget, unzip, zip, sha256sum (or shasum on macOS).
 
@@ -62,28 +55,19 @@ set -euo pipefail
 TEE_TAG_DEFAULT="v6.0.1-307"
 TEE_ASSET_DEFAULT="TEESimulator-RS-v6.0.1-307-Release.zip"
 
-# TrickyStore (5ec1cff fork) — an alternative attestation engine. Only used when
-# --engine trickystore is passed. Pinned here; --ts / --ts-file override.
-TS_TAG_DEFAULT="1.4.1"
-TS_ASSET_DEFAULT="Tricky-Store-v1.4.1-245-72b2e84-release.zip"
-
-# TrickyStoreOSS (beakthoven) — the open-source TrickyStore. Cleaner than the
-# 5ec1cff build (plain classes.dex + libinject.so, no obfuscated blobs). Used
-# when --engine trickystoreoss is passed. Pinned here; --tsoss / --tsoss-file
-# override.
+# TrickyStoreOSS (beakthoven) — the open-source TrickyStore keystore engine
+# (plain classes.dex + libinject.so, no obfuscated blobs). Only used when
+# --engine trickystoreoss is passed. Pinned here; --tsoss / --tsoss-file override.
 TSOSS_TAG_DEFAULT="v3.0.0"
 TSOSS_ASSET_DEFAULT="Tricky-Store-OSS-v3.0.0-155-f57cf4f-Release.zip"
 
 TEE_TAG="$TEE_TAG_DEFAULT"
 TEE_ASSET="$TEE_ASSET_DEFAULT"
-TS_TAG="$TS_TAG_DEFAULT"
-TS_ASSET="$TS_ASSET_DEFAULT"
 TSOSS_TAG="$TSOSS_TAG_DEFAULT"
 TSOSS_ASSET="$TSOSS_ASSET_DEFAULT"
-ENGINE_KIND="tee"          # tee (default) | trickystore | trickystoreoss
+ENGINE_KIND="tee"          # tee (default) | trickystoreoss
 DO_CLEAN=0
 TEE_FILE=""
-TS_FILE=""
 TSOSS_FILE=""
 PIF_FILE=""
 PIF_TAG_OVERRIDE=""
@@ -94,9 +78,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --tee)        TEE_TAG="$2"; shift 2 ;;
         --tee-asset)  TEE_ASSET="$2"; shift 2 ;;
-        --ts)         TS_TAG="$2"; shift 2 ;;
-        --ts-asset)   TS_ASSET="$2"; shift 2 ;;
-        --ts-file)    TS_FILE="$2"; shift 2 ;;
         --tsoss)      TSOSS_TAG="$2"; shift 2 ;;
         --tsoss-asset) TSOSS_ASSET="$2"; shift 2 ;;
         --tsoss-file) TSOSS_FILE="$2"; shift 2 ;;
@@ -120,15 +101,13 @@ done
 strip_cr() { printf '%s' "${1//$'\r'/}"; }
 TEE_TAG=$(strip_cr "$TEE_TAG")
 TEE_ASSET=$(strip_cr "$TEE_ASSET")
-TS_TAG=$(strip_cr "$TS_TAG")
-TS_ASSET=$(strip_cr "$TS_ASSET")
 TSOSS_TAG=$(strip_cr "$TSOSS_TAG")
 TSOSS_ASSET=$(strip_cr "$TSOSS_ASSET")
 ENGINE_KIND=$(strip_cr "$ENGINE_KIND")
 
 case "$ENGINE_KIND" in
-    tee|trickystore|trickystoreoss) ;;
-    *) echo "Unknown --engine '$ENGINE_KIND' (use: tee | trickystore | trickystoreoss)" >&2; exit 1 ;;
+    tee|trickystoreoss) ;;
+    *) echo "Unknown --engine '$ENGINE_KIND' (use: tee | trickystoreoss)" >&2; exit 1 ;;
 esac
 
 # ---------- Paths ----------
@@ -233,7 +212,6 @@ fi
 # Exactly one engine is fetched per run, selected by --engine. Both are shared
 # across every requested line, so this happens once, before build_variant.
 tee_zip=""
-ts_zip=""
 tsoss_zip=""
 
 case "$ENGINE_KIND" in
@@ -250,21 +228,6 @@ tee)
             || die "TEESimulator-RS download failed"
     else
         green "    cached: $TEE_ASSET"
-    fi
-    ;;
-trickystore)
-    [[ -f "$ATTEST_SRC/trickystore.sh" ]] || die "missing attest/trickystore.sh"
-    ts_zip="$DL/$TS_ASSET"
-    if [[ -n "$TS_FILE" ]]; then
-        [[ -f "$TS_FILE" ]] || die "--ts-file not found: $TS_FILE"
-        ts_zip="$TS_FILE"
-        green "    local TrickyStore zip: $TS_FILE"
-    elif [[ ! -f "$ts_zip" ]]; then
-        bold "==> Downloading TrickyStore $TS_TAG"
-        $FETCH "$ts_zip" "https://github.com/5ec1cff/TrickyStore/releases/download/$TS_TAG/$TS_ASSET" \
-            || die "TrickyStore download failed"
-    else
-        green "    cached: $TS_ASSET"
     fi
     ;;
 trickystoreoss)
@@ -529,43 +492,6 @@ if [[ "$ENGINE_KIND" == "tee" ]]; then
     cp "$TEE_EXTRACT/classes.dex" "$STAGE/tee_classes.dex"
 
     [[ -f "$TEE_EXTRACT/keybox.xml" ]] && cp "$TEE_EXTRACT/keybox.xml" "$STAGE/keybox.xml"
-elif [[ "$ENGINE_KIND" == "trickystore" ]]; then
-    # TrickyStore: native inject lib (lib/{arm64,arm,x64}/libtricky_store.so —
-    # note x86 is unsupported upstream), the app_process service.apk, the
-    # per-arch machikado injectors + mazoku blob, TrickyStore's own daemon
-    # launcher (replaces module/daemon), and a default keybox seed. The lib dir
-    # tokens (arm64/arm/x64) match customize.sh's $ARCH, so attest.sh installs
-    # them as lib/$ARCH/libtricky_store.so with no remap.
-    TS_EXTRACT="$BUILD/ts_extracted"
-    rm -rf "$TS_EXTRACT"
-    mkdir -p "$TS_EXTRACT"
-    unzip -qq -o "$ts_zip" -d "$TS_EXTRACT"
-
-    mkdir -p "$STAGE/lib"
-    for abi in arm64 arm x64; do
-        if [[ -f "$TS_EXTRACT/lib/$abi/libtricky_store.so" ]]; then
-            mkdir -p "$STAGE/lib/$abi"
-            cp "$TS_EXTRACT/lib/$abi/libtricky_store.so" "$STAGE/lib/$abi/"
-        fi
-    done
-    [[ -f "$STAGE/lib/arm64/libtricky_store.so" ]] \
-        || die "TrickyStore ZIP missing lib/arm64/libtricky_store.so — upstream layout changed"
-
-    [[ -f "$TS_EXTRACT/service.apk" ]] || die "TrickyStore ZIP missing service.apk"
-    cp "$TS_EXTRACT/service.apk" "$STAGE/service.apk"
-
-    for f in machikado.arm64 machikado.arm machikado.x64 mazoku; do
-        [[ -f "$TS_EXTRACT/$f" ]] && cp "$TS_EXTRACT/$f" "$STAGE/$f"
-    done
-    [[ -f "$STAGE/mazoku" ]] || die "TrickyStore ZIP missing mazoku"
-    [[ -f "$STAGE/machikado.arm64" ]] || die "TrickyStore ZIP missing machikado.arm64"
-
-    # TrickyStore's daemon is an app_process launcher — it replaces the TEE
-    # daemon script that module/ ships (both live at the module root as 'daemon').
-    [[ -f "$TS_EXTRACT/daemon" ]] || die "TrickyStore ZIP missing daemon"
-    cp "$TS_EXTRACT/daemon" "$STAGE/daemon"
-
-    [[ -f "$TS_EXTRACT/keybox.xml" ]] && cp "$TS_EXTRACT/keybox.xml" "$STAGE/keybox.xml"
 else
     # TrickyStoreOSS (beakthoven): a plain classes.dex (renamed to
     # tsoss_classes.dex so it coexists with PIF's classes.dex), per-abi
@@ -826,7 +752,6 @@ done
 
 # ---------- Generate ZIP ----------
   local VERSION OUT_ZIP ATTEST_SUFFIX=""
-  [[ "$ENGINE_KIND" == "trickystore" ]]    && ATTEST_SUFFIX="-TS"
   [[ "$ENGINE_KIND" == "trickystoreoss" ]] && ATTEST_SUFFIX="-TSOSS"
   VERSION=$(grep '^version=' "$STAGE/module.prop" | cut -d= -f2)
   OUT_ZIP="$OUT/AlwaysStrong-${VERSION}${ZIP_SUFFIX}${ATTEST_SUFFIX}.zip"

@@ -122,14 +122,13 @@ Every run produces both lines:
 
 ### Other keystore engines (self-build only)
 
-Releases only ever ship the TEESimulator-RS build. The keystore layer can instead be swapped for [TrickyStore](https://github.com/5ec1cff/TrickyStore) or the open-source [TrickyStoreOSS](https://github.com/beakthoven/TrickyStoreOSS) — these are never published, so build one yourself by pointing `build.sh` at the upstream release ZIP:
+Releases only ever ship the TEESimulator-RS build. The keystore layer can instead be swapped for the open-source [TrickyStoreOSS](https://github.com/beakthoven/TrickyStoreOSS) — never published, so build it yourself by pointing `build.sh` at the upstream release ZIP:
 
 ```bash
-./build.sh --engine trickystore    --ts-file    Tricky-Store-v1.4.1-...-release.zip
 ./build.sh --engine trickystoreoss --tsoss-file Tricky-Store-OSS-v3.0.0-...-Release.zip
 ```
 
-The output ZIP gets a `-TS` / `-TSOSS` suffix; drop `--*-file` to auto-download the pinned release. All three engines read the same `/data/adb/tricky_store/` config, so the scripts and WebUI are unchanged.
+The output ZIP gets a `-TSOSS` suffix; drop `--tsoss-file` to auto-download the pinned release. Both engines read the same `/data/adb/tricky_store/` config, so the scripts and WebUI are unchanged.
 
 Both default lines are built from this one tree — there is no second branch:
 
@@ -163,6 +162,7 @@ AlwaysStrong is combine of TEE-Simulator-RS + Play Integrity Fork
 - [JingMatrix](https://github.com/JingMatrix/TEESimulator) — original TEESimulator and keystore2 interception
 - [Enginex0](https://github.com/Enginex0/TEESimulator-RS) — TEESimulator-RS (Rust port, native certgen, AOSP-spec attestation)
 - [5ec1cff](https://github.com/5ec1cff/TrickyStore) — TrickyStore, which pioneered keystore interception and the config-dir layout reused here
+- [beakthoven](https://github.com/beakthoven/TrickyStoreOSS) — TrickyStoreOSS, the open-source keystore engine offered as a self-build option
 - [chiteroman](https://github.com/chiteroman) — original Play Integrity Fix
 - [osm0sis](https://github.com/osm0sis/PlayIntegrityFork) — PlayIntegrityFork, the maintained fork bundled here
 - [Displax](https://github.com/Displax/safetynet-fix) — module boot scripts forked into PIF

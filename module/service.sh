@@ -23,7 +23,7 @@ else
     ENGINE=none
 fi
 
-# --- Attestation engine adapter (TEESimulator-RS | TrickyStore) -----------
+# --- Attestation engine adapter (TEESimulator-RS | TrickyStoreOSS) -----------
 # build.sh overlays exactly one attest.sh; the daemon start/liveness below go
 # through it. Fall back to the TEESimulator pattern if it is somehow missing.
 if [ -f "$MODDIR/attest.sh" ]; then
@@ -34,12 +34,12 @@ else
     attest_alive() { pidof TEESimulator >/dev/null 2>&1 || pidof daemon >/dev/null 2>&1; }
 fi
 
-# Engines that hijack keystore2 (TrickyStore) must start at the service stage,
+# Engines that hijack keystore2 (TrickyStoreOSS) must start at the service stage,
 # before sys.boot_completed — a late start misses the injection window and the
 # daemon crash-loops with EBADF. Engines that don't (TEESimulator) return false
 # here and are started after the boot-completed wait below.
 #
-# TrickyStore reads the verified-boot state when building the attestation
+# TrickyStoreOSS reads the verified-boot state when building the attestation
 # rootOfTrust. The lock-state props are otherwise only asserted in the late
 # block below (after boot_completed), so an early start could read the raw
 # ORANGE/unlocked values. Pin the rootOfTrust-relevant props here first so the
@@ -136,7 +136,7 @@ fi
 # --- Wait for boot, then start TEE simulator ---
 while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done
 
-# Kill any stale TEE / aswatcher processes from a previous boot. TrickyStore is
+# Kill any stale TEE / aswatcher processes from a previous boot. TrickyStoreOSS is
 # NOT in this list: when its engine is active it was already started early
 # (above), so killing it here would nuke the live daemon.
 for proc in TEESimulator supervisor daemon aswatcher; do
@@ -147,7 +147,7 @@ done
 pkill -9 -f TEESimulator 2>/dev/null || true
 
 # Start the attestation engine here only if it did NOT want the early start
-# (TEESimulator). TrickyStore is already running from the early start above.
+# (TEESimulator). TrickyStoreOSS is already running from the early start above.
 if ! attest_early 2>/dev/null; then
     attest_start
 fi
