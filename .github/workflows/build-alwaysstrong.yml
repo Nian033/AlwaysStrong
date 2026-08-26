@@ -18,24 +18,26 @@ jobs:
           repository: evoker0/AlwaysStrong
           path: AlwaysStrong
 
-      # 2. 设置 Rust & Android NDK 环境
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android, armv7-linux-androideabi
-
+      # 2. 配置 JDK 17
       - name: Setup JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
+      # 3. 使用官方/主流 Action 安装 Android SDK & NDK（修复 niku/setup-android-ndk 报错）
       - name: Setup Android NDK
-        uses: niku/setup-android-ndk@v1
+        uses: nsetup/setup-sdk@v1
         with:
-          ndk-version: r26b
+          ndk-version: '26.1.10909125'
 
-      # 3. 编译 Enginex0/TEESimulator-RS
+      # 4. 配置 Rust & 交叉编译目标
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
+      # 5. 编译 Enginex0/TEESimulator-RS
       - name: Checkout and Build TEESimulator-RS
         run: |
           git clone --recursive https://github.com/Enginex0/TEESimulator-RS.git TEESimulator-RS
@@ -50,7 +52,7 @@ jobs:
             cargo ndk -t arm64-v8a -t armeabi-v7a -o ./target/android build --release
           fi
 
-      # 4. 编译 KOWX712/PlayIntegrityFix
+      # 6. 编译 KOWX712/PlayIntegrityFix
       - name: Checkout and Build PlayIntegrityFix
         run: |
           git clone --recursive https://github.com/KOWX712/PlayIntegrityFix.git PlayIntegrityFix
@@ -58,16 +60,14 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      # 5. 执行二进制文件替换与重新打包
+      # 7. 替换文件并重新打包
       - name: Replace Components and Build Final Module Zip
         run: |
           echo "=== 正在替换 TEESimulator-RS 编译产物 ==="
-          # 将 TEESimulator-RS 编译出来的文件替换到 AlwaysStrong 的对应位置
           find TEESimulator-RS/ -type f \( -name "*.so" -o -name "teesimulator*" \) -exec cp -fv {} AlwaysStrong/ \; || true
 
           echo "=== 正在替换 PlayIntegrityFix 编译产物 ==="
-          # 解压编译好的 PlayIntegrityFix 或复制其 .so/核心依赖文件到 AlwaysStrong 中
-          PIF_ZIP=$(find PlayIntegrityFix/app/build/outputs/ -name "*.zip" | head -n 1)
+          PIF_ZIP=$(find PlayIntegrityFix/ -name "*.zip" | head -n 1)
           if [ -n "$PIF_ZIP" ]; then
             mkdir -p pif_extracted
             unzip -o "$PIF_ZIP" -d pif_extracted/
@@ -78,7 +78,7 @@ jobs:
           cd AlwaysStrong
           zip -r ../AlwaysStrong-Custom.zip . -x "*.git*" "*.github*"
 
-      # 6. 上传构建好的 ZIP 模块供下载
+      # 8. 上传编译产物
       - name: Upload AlwaysStrong Custom Module
         uses: actions/upload-artifact@v4
         with:
